@@ -8,8 +8,10 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, Swords, BookOpen, Warehouse, Ghost, MapPin, Loader2 } from 'lucide-react';
-import { useUser, useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
+import { Input } from '@/components/ui/input';
+import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target } from 'lucide-react';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { collection, doc } from 'firebase/firestore';
 
 export function ConfigPanel() {
@@ -114,6 +116,19 @@ export function ConfigPanel() {
                   checked={getSetting('pvp_attack', false)} 
                   onCheckedChange={(checked) => updateSetting('pvp_attack', checked)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs flex items-center gap-2">
+                  <Target className="w-3 h-3" /> Specific Target Name
+                </Label>
+                <Input 
+                  placeholder="Enter Werewolf Name"
+                  value={getSetting('pvp_target_name', '')}
+                  onChange={(e) => updateSetting('pvp_target_name', e.target.value)}
+                  className="h-8 bg-background/50 text-xs"
+                />
+                <p className="text-[10px] text-muted-foreground italic">Leave empty for random district hunts.</p>
               </div>
             </div>
           </TabsContent>

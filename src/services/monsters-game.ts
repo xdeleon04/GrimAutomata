@@ -1,3 +1,4 @@
+
 /**
  * @fileOverview Service for interacting with MonstersGame via MoonID.
  * Handles authentication, cookie persistence, and active ritual execution (automations).
@@ -30,11 +31,16 @@ export interface MonstersGameStats {
 
 /**
  * Normalizes European number formatting (e.g., 66.876,06 -> 66876.06)
+ * In MonstersGame ES, '.' is often the thousands separator and ',' is the decimal.
  */
 function parseMGNumber(str: string | null): number {
   if (!str) return 0;
   // Remove thousands separator (.) and replace decimal separator (,) with (.)
-  const normalized = str.replace(/\./g, '').replace(',', '.');
+  // We handle both variants just in case
+  const normalized = str.trim()
+    .replace(/\s/g, '') // Remove any spaces
+    .replace(/\./g, '') // Remove dots (thousands)
+    .replace(',', '.');  // Convert comma to dot (decimal)
   return parseFloat(normalized) || 0;
 }
 
@@ -154,12 +160,17 @@ export async function fetchMonstersGameData(
             logDebug(`[AUTOMATA] PvP is on cooldown: ${pvpCooldownMatch[1]} minutes remaining.`);
             logs.push({ type: 'INFO', message: `Shadow Ritual: PvP cooldown active (${pvpCooldownMatch[1]}m remaining).`, timestamp: new Date().toISOString() });
           } else {
-            logDebug(`[AUTOMATA] Initiating random district hunt...`);
+            // Check for specific target name or random
+            const targetName = settings.pvp_target_name;
+            logDebug(`[AUTOMATA] Initiating ${targetName ? `targeted hunt for [${targetName}]` : 'random district hunt'}...`);
+            
             const pvpSearchPayload = new URLSearchParams({
               ac: 'raubzug',
               sac: 'gegner',
-              searchopt: '', // Normal search
+              searchname: targetName || '',
+              searchopt: targetName ? '' : '', // Normal search if no target
             });
+
             const pvpSearchRes = await fetch(huntPageUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
@@ -204,7 +215,7 @@ export async function fetchMonstersGameData(
                   }
                 }
               } else if (huntResultHtml.includes("scanned the area") || huntResultHtml.includes("in vain") || huntResultHtml.includes("Adversario in vain")) {
-                logs.push({ type: 'INFO', message: 'Shadow Ritual: Scanned for Werewolves in vain.', timestamp: new Date().toISOString() });
+                logs.push({ type: 'INFO', message: `Shadow Ritual: Scanned for ${targetName ? targetName : 'Werewolves'} in vain.`, timestamp: new Date().toISOString() });
               }
             }
           }
