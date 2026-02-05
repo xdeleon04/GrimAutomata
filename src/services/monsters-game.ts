@@ -12,7 +12,7 @@ export interface MonstersGameStats {
     message: string;
     timestamp: string;
   }>;
-  pvpCooldown: number; // Seconds remaining for PvP
+  pvpCooldown: number; // Seconds remaining for any active cooldown (PvP, Work, or Manhunt)
   stats: {
     level: number;
     gold: number;
@@ -132,10 +132,19 @@ export async function fetchMonstersGameData(
     const staminaReserve = parseInt(settings.stamina_reserve || '5');
     const race = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
 
-    const isBusy = html.includes("trabajando") || html.includes("misión") || html.includes("Gruta Ancestral");
+    // Check for global busy state or active cooldowns on status page
+    const secondsMatchStatus = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
+    pvpCooldown = secondsMatchStatus ? parseInt(secondsMatchStatus[1]) : 0;
+
+    const isWorking = html.includes("trabajando") || html.includes("trabajas") || html.includes("cementerio");
+    const isBusy = isWorking || html.includes("misión") || html.includes("Gruta Ancestral");
+
+    if (isBusy) {
+      logDebug(`[SYNC] Ritual active: ${isWorking ? 'WORKING' : 'BUSY'}. Cooldown: ${pvpCooldown}s`);
+    }
 
     // --- STEP 2: AUTOMATION RITUALS ---
-    if (!isBusy) {
+    if (!isBusy && pvpCooldown === 0) {
       if (stamina <= staminaReserve) {
         if (settings.auto_work !== false) {
           const hoursToWork = Math.min(12, Math.max(1, Math.ceil((maxStamina - stamina) / 20)));
@@ -149,7 +158,7 @@ export async function fetchMonstersGameData(
             arbeitszeit: hoursToWork.toString()
           });
 
-          await fetch(workUrl, {
+          const workRes = await fetch(workUrl, {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/x-www-form-urlencoded', 
@@ -159,6 +168,10 @@ export async function fetchMonstersGameData(
             },
             body: workPayload
           });
+
+          const workHtml = await workRes.text();
+          const secondsMatchWork = workHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
+          pvpCooldown = secondsMatchWork ? parseInt(secondsMatchWork[1]) : hoursToWork * 3600;
 
           logs.push({ 
             type: 'INFO', 
@@ -171,23 +184,18 @@ export async function fetchMonstersGameData(
         const huntPageRes = await fetch(huntPageUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
         const huntHtml = await huntPageRes.text();
 
-        // Detect cooldown from SecondsCOUNTER script variable
+        // Detect cooldown from SecondsCOUNTER script variable on raid page
         const secondsMatch = huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
         pvpCooldown = secondsMatch ? parseInt(secondsMatch[1]) : 0;
         
-        if (pvpCooldown > 0) {
-          const m = Math.floor(pvpCooldown / 60);
-          const s = pvpCooldown % 60;
-          logDebug(`[AUTOMATA] PvP Cooldown active: ${m}m ${s}s`);
-          // We don't push a 'Resting' log every sync to avoid clutter. 
-          // The StatusHeader UI handles the countdown display.
-        } else {
+        if (pvpCooldown === 0) {
           const humanLimitReached = huntHtml.includes("used all of today's hunting time") || huntHtml.includes("ya has usado todo tu tiempo de caza");
           
           if (humanLimitReached) {
             logDebug(`[AUTOMATA] Manhunt limit reached. Switching to PvP...`);
             if (settings.pvp_attack) {
               const targetName = settings.pvp_target_name;
+              // Strategy 'none' maps to empty searchopt in the real game
               const strategyValue = settings.pvp_search_strategy === 'none' ? '' : (settings.pvp_search_strategy || '');
               
               const pvpSearchPayload = new URLSearchParams({
@@ -226,6 +234,10 @@ export async function fetchMonstersGameData(
                   const lootMatch = battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i);
                   const expMatch = battleHtml.match(/sumados (\d+) punto\(s\) de experiencia/i);
 
+                  // Extract new cooldown from battle result page
+                  const secondsMatchBattle = battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
+                  pvpCooldown = secondsMatchBattle ? parseInt(secondsMatchBattle[1]) : 900;
+
                   if (winnerMatch) {
                     const winnerName = winnerMatch[1].trim();
                     const isWinner = winnerName === username || winnerName.includes(username);
@@ -246,11 +258,15 @@ export async function fetchMonstersGameData(
           } else if (settings.auto_manhunt) {
             const duration = settings.manhunt_duration || '60';
             const mPayload = new URLSearchParams({ ac: 'raubzug', sac: 'vampir', duration: duration, search: 'Empezar la búsqueda' });
-            await fetch(huntPageUrl, {
+            const mRes = await fetch(huntPageUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
               body: mPayload
             });
+            const mHtml = await mRes.text();
+            const secondsMatchM = mHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
+            pvpCooldown = secondsMatchM ? parseInt(secondsMatchM[1]) : parseInt(duration) * 60;
+            
             logs.push({ type: 'MANHUNT', message: `Shadow Ritual: Manhunt started for ${duration} minutes.`, timestamp: new Date().toISOString() });
           }
         }
