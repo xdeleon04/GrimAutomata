@@ -79,7 +79,6 @@ export async function fetchMonstersGameData(
 
     logDebug(`[DEBUG] Ritual Step 2: Binding Identity to MoonID`);
     
-    // 1b. Perform Login
     const loginPayload = new URLSearchParams({
       csrfmiddlewaretoken: csrfToken,
       username: username,
@@ -106,7 +105,6 @@ export async function fetchMonstersGameData(
     logDebug(`[DEBUG] MoonID Gate Status: ${loginResponse.status}`);
     updateCookies(loginResponse.headers.getSetCookie());
 
-    // 1c. Follow Redirect to API Connect (This is crucial for establishing the game session)
     let targetUrl = loginResponse.headers.get('Location');
     if (loginResponse.status === 302 && targetUrl) {
       if (targetUrl.startsWith('/')) targetUrl = 'https://moonid.net' + targetUrl;
@@ -122,7 +120,6 @@ export async function fetchMonstersGameData(
       });
       updateCookies(connectResponse.headers.getSetCookie());
       
-      // 1d. Follow final redirect to the game server
       let gameUrl = connectResponse.headers.get('Location');
       if (gameUrl) {
         logDebug(`[DEBUG] Finalizing connection to Realm Core: ${gameUrl}`);
@@ -135,11 +132,8 @@ export async function fetchMonstersGameData(
         });
         updateCookies(gameInitResponse.headers.getSetCookie());
       }
-    } else if (loginResponse.status === 403) {
-      throw new Error("Sanctum denied entry (403). Gateway protection detected.");
     }
 
-    // 2. Connect to the specific game server status page
     const statusUrl = `https://${server}/index.php?ac=status`;
     logDebug(`[DEBUG] Ritual Step 3: Scanning Character Scrolls at ${statusUrl}`);
     
@@ -154,42 +148,66 @@ export async function fetchMonstersGameData(
     const html = await statusResponse.text();
     logDebug(`[DEBUG] Scroll Data Length: ${html.length} symbols`);
 
-    // Extract Stats using robust Regex targeting the Spanish UI
-    const extract = (regex: RegExp, content: string) => {
+    // Extract Stats using robust Regex targeting the Spanish UI provided
+    const extractValue = (regex: RegExp, content: string) => {
       const match = content.match(regex);
       return match ? match[1] : null;
     };
 
-    // Extracting from Statbar (Reliable summary at the bottom)
-    const rawGold = extract(/id="goldbalance">([\d,.]+)<\/span>/i, html);
-    const gold = parseMGNumber(rawGold);
+    // 1. Level extraction - multiple patterns for robustness
+    let level = 0;
+    const levelMatch = html.match(/class="char_level"[^>]*>(?:Nivel\s*)?(\d+)/i) || 
+                       html.match(/Nivel del personaje:.*?(\d+)/si);
+    if (levelMatch) {
+      level = parseInt(levelMatch[1]);
+      logDebug(`[DEBUG] Extracted Level: ${level}`);
+    } else {
+      logDebug(`[DEBUG] Level not found in char_level or label. Checking raw text.`);
+      const fallbackLevel = html.match(/Nivel\s+(\d+)/i);
+      if (fallbackLevel) level = parseInt(fallbackLevel[1]);
+    }
+
+    // 2. Gold extraction from statbar
+    const gold = parseMGNumber(extractValue(/id="goldbalance">([\d,.]+)<\/span>/i, html));
     
-    // Experiencia: 1411 / 1445 (Targeting the statbarEntry)
-    const expMatch = html.match(/Experiencia:\s*([\d.]+)\s*\/\s*([\d.]+)/i);
-    const experience = expMatch ? parseInt(expMatch[1].replace(/\./g, '')) : 0;
-    const nextLevelExp = expMatch ? parseInt(expMatch[2].replace(/\./g, '')) : 0;
+    // 3. Experience extraction - prioritizing statbar for summary
+    let experience = 0;
+    let nextLevelExp = 100;
+    const expMatch = html.match(/Experiencia:\s*([\d.]+)\s*[\/|]\s*([\d.]+)/i);
+    if (expMatch) {
+      experience = parseInt(expMatch[1].replace(/\./g, ''));
+      nextLevelExp = parseInt(expMatch[2].replace(/\./g, ''));
+      logDebug(`[DEBUG] Experience Sync: ${experience} / ${nextLevelExp}`);
+    } else {
+      // Table fallback for XP
+      const expTableMatch = html.match(/Experiencia total:.*?\((\d+)\|(\d+)\)/si);
+      if (expTableMatch) {
+        experience = parseInt(expTableMatch[1]);
+        nextLevelExp = parseInt(expTableMatch[2]);
+      }
+    }
 
-    // Nivel del personaje (Targeting the char_level span in the habilidades table)
-    // <span class="char_level">Nivel 17</span>
-    const levelMatch = html.match(/class="char_level"[^>]*>(?:Nivel\s*)?(\d+)/i);
-    const level = levelMatch ? parseInt(levelMatch[1]) : 0;
-    logDebug(`[DEBUG] Extracted Character Level: ${level}`);
+    // 4. Attributes extraction - targeting the Spanish labels
+    const findStat = (label: string) => {
+      const regex = new RegExp(`${label}:.*?\\((\\d+)\\)`, 'si');
+      const match = html.match(regex);
+      return match ? parseInt(match[1]) : 0;
+    };
 
-    // Attributes from Spanish skills table
-    const str = parseInt(extract(/Fuerza:.*?\((\d+)\)/si, html) || '0');
-    const def = parseInt(extract(/Defensa:.*?\((\d+)\)/si, html) || '0');
-    const agi = parseInt(extract(/Agilidad:.*?\((\d+)\)/si, html) || '0');
-    const con = parseInt(extract(/Resistencia:.*?\((\d+)\)/si, html) || '0');
-    const dex = parseInt(extract(/Destreza:.*?\((\d+)\)/si, html) || '0');
+    const str = findStat('Fuerza');
+    const def = findStat('Defensa');
+    const agi = findStat('Agilidad');
+    const con = findStat('Resistencia');
+    const dex = findStat('Destreza');
 
-    // Energía vital: (780|780)
-    const rawStamina = extract(/Energía\s+vital:.*?\((\d+)\|/si, html);
+    // 5. Vital Energy (Stamina)
+    const rawStamina = extractValue(/Energía\s+vital:.*?\((\d+)[|/]/si, html);
     const stamina = rawStamina ? parseInt(rawStamina) : 100;
 
-    // Determine Race (Check for Spanish terms)
+    // Determine Race
     const race: 'Vampire' | 'Werewolf' = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
     
-    logDebug(`[DEBUG] Final Stats Scanned -> Level: ${level}, Gold: ${gold}, Race: ${race}, STR: ${str}, CON: ${con}`);
+    logDebug(`[DEBUG] Scan Finalized -> Lvl: ${level}, Gold: ${gold}, STR: ${str}, CON: ${con}`);
 
     const logs: MonstersGameStats['logs'] = [];
     debugLogs.forEach(msg => {
@@ -200,10 +218,10 @@ export async function fetchMonstersGameData(
       });
     });
 
-    if (html.includes("You're still at work") || html.includes("Todavía estás trabajando") || html.includes("estás trabajando")) {
+    if (html.includes("You're still at work") || html.includes("estás trabajando")) {
       logs.push({
         type: 'INFO',
-        message: 'Currently performing a ritual of labor in the mortal realm (Working).',
+        message: 'Currently performing a ritual of labor (Working). System on standby.',
         timestamp: new Date().toISOString()
       });
     }
