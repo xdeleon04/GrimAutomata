@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Service for interacting with MonstersGame via MoonID.
@@ -41,6 +40,17 @@ function parseMGNumber(str: string | null): number {
     .replace(/\./g, '')
     .replace(',', '.');
   return parseFloat(normalized) || 0;
+}
+
+/**
+ * Formats seconds into a human-readable duration string.
+ */
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  return `${m}m ${s}s`;
 }
 
 /**
@@ -130,17 +140,14 @@ export async function fetchMonstersGameData(
     const stamina = parseMGNumber(staminaMatch ? staminaMatch[1] : "0");
     const maxStamina = parseMGNumber(staminaMatch && staminaMatch[2] ? staminaMatch[2] : "780");
     
-    // stamina_reserve is now a percentage (0-100)
     const staminaReservePercent = parseInt(settings.stamina_reserve || '10');
     const thresholdValue = (staminaReservePercent / 100) * maxStamina;
     
     const race = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
 
-    // Check for global busy state or active cooldowns
     const secondsMatchStatus = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
     pvpCooldown = secondsMatchStatus ? parseInt(secondsMatchStatus[1]) : 0;
     
-    // Parse action code from JS to determine activity type
     const acMatch = html.match(/var\s+ac\s*=\s*['"]([^'"]+)['"]/i);
     const currentAction = acMatch ? acMatch[1] : '';
 
@@ -158,7 +165,7 @@ export async function fetchMonstersGameData(
     const isBusy = isWorking || isInMission || isManhunting;
 
     if (isBusy || pvpCooldown > 0) {
-      const timeLeft = `${Math.floor(pvpCooldown / 60)}m ${pvpCooldown % 60}s`;
+      const timeLeft = formatDuration(pvpCooldown);
       let busyMsg = `Shadow Vigil: Character is currently resting. PvP Cooldown: ${timeLeft}.`;
       
       if (isWorking) {
@@ -181,9 +188,9 @@ export async function fetchMonstersGameData(
     if (!isBusy && pvpCooldown === 0) {
       if (stamina <= thresholdValue) {
         if (settings.auto_work !== false) {
-          // Calculate hours to get back to threshold + 10% buffer
+          // Graveyard restores stamina over time. Base estimation used for ritual timing.
           const pointsNeeded = thresholdValue - stamina + (maxStamina * 0.1);
-          const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 20))); // MG base graveyard is roughly 20/hr
+          const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 20))); 
           
           const workUrl = `https://${server}/index.php?ac=friedhof`;
           logDebug(`[AUTOMATA] Energy below threshold (${stamina}/${thresholdValue.toFixed(0)}). Initiating graveyard shift for ${hoursToWork}h.`);
@@ -226,7 +233,6 @@ export async function fetchMonstersGameData(
         const huntPageRes = await fetch(huntPageUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
         const huntHtml = await huntPageRes.text();
 
-        // Detect cooldown from SecondsCOUNTER script variable on raid page
         const secondsMatch = huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
         pvpCooldown = secondsMatch ? parseInt(secondsMatch[1]) : 0;
         
@@ -286,7 +292,7 @@ export async function fetchMonstersGameData(
                     
                     logs.push({ 
                       type: 'BATTLE', 
-                      message: `Shadow Ritual: PvP ${isWinner ? 'VICTORY' : 'DEFEAT'} vs [${opponentName}]. Loot: ${loot} gold, +${exp} XP. Cooldown: ${Math.floor(pvpCooldown / 60)}m.`, 
+                      message: `Shadow Ritual: PvP ${isWinner ? 'VICTORY' : 'DEFEAT'} vs [${opponentName}]. Loot: ${loot} gold, +${exp} XP. Cooldown: ${formatDuration(pvpCooldown)}.`, 
                       timestamp: new Date().toISOString() 
                     });
                   }
@@ -308,11 +314,10 @@ export async function fetchMonstersGameData(
             const secondsMatchM = mHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
             pvpCooldown = secondsMatchM ? parseInt(secondsMatchM[1]) : parseInt(duration) * 60;
             
-            logs.push({ type: 'MANHUNT', message: `Shadow Ritual: Manhunt started for ${duration}m. XP and Gold incoming.`, timestamp: new Date().toISOString() });
+            logs.push({ type: 'MANHUNT', message: `Shadow Ritual: Manhunt started for ${duration}m. XP and Gold incoming. Cooldown: ${formatDuration(pvpCooldown)}.`, timestamp: new Date().toISOString() });
           }
         }
 
-        // Grotto Fallback
         if (settings.auto_grotto && pvpCooldown === 0 && !logs.some(l => l.type === 'MANHUNT' || l.type === 'BATTLE')) {
           const grottoUrl = `https://${server}/index.php?ac=ahnenstaette`;
           const gCheck = await fetch(grottoUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
@@ -331,7 +336,7 @@ export async function fetchMonstersGameData(
             const gSecondsMatch = gResHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
             pvpCooldown = gSecondsMatch ? parseInt(gSecondsMatch[1]) : 600;
 
-            logs.push({ type: 'MISSION', message: `Shadow Ritual: Entering Ancestral Grotto (${settings.mission_difficulty || 'medium'}). Rest period started.`, timestamp: new Date().toISOString() });
+            logs.push({ type: 'MISSION', message: `Shadow Ritual: Entering Ancestral Grotto (${settings.mission_difficulty || 'medium'}). Rest period: ${formatDuration(pvpCooldown)}.`, timestamp: new Date().toISOString() });
           }
         }
       }
@@ -340,7 +345,6 @@ export async function fetchMonstersGameData(
       html = await statusResponse.text();
     }
 
-    // --- STEP 3: FINAL EXTRACTION ---
     const levelMatch = html.match(/class=["']char_level["'][^>]*>(?:Nivel\s*)?(\d+)/i);
     const goldMatch = html.match(/id=["']goldbalance["'][^>]*>([\d,.]+)</i);
     const skillMatch = html.match(/id=["']statbarSkillAverage["'][^>]*>(?:.*?):\s*([\d,.]+)/i);
