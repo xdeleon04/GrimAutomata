@@ -33,6 +33,7 @@ export interface MonstersGameStats {
  */
 function parseMGNumber(str: string | null): number {
   if (!str) return 0;
+  // Remove thousands separator (.) and replace decimal separator (,) with (.)
   const normalized = str.replace(/\./g, '').replace(',', '.');
   return parseFloat(normalized) || 0;
 }
@@ -95,7 +96,9 @@ export async function fetchMonstersGameData(
         'Content-Type': 'application/x-www-form-urlencoded',
         'Cookie': getCookieString(),
         'User-Agent': userAgent,
-        'Referer': 'https://moonid.net/account/login/'
+        'Referer': 'https://moonid.net/account/login/',
+        'Origin': 'https://moonid.net',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
       },
       body: loginPayload,
       redirect: 'manual'
@@ -122,67 +125,97 @@ export async function fetchMonstersGameData(
       }
     }
 
-    // --- STEP 1: INITIAL SYNC (Check status before action) ---
+    // --- STEP 1: INITIAL SYNC ---
     const statusUrl = `https://${server}/index.php?ac=status`;
     let statusResponse = await fetch(statusUrl, {
       headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent }
     });
     let html = await statusResponse.text();
 
-    // Extract Stamina to see if we can perform rituals
+    // Extract Basic Stats for ritual decisions
     const staminaMatch = html.match(/Energía\s+vital:.*?\(\s*(\d+)\s*[|/]\s*(\d+)\s*\)/si);
     const stamina = staminaMatch ? parseInt(staminaMatch[1]) : 0;
+    const maxStamina = staminaMatch ? parseInt(staminaMatch[2]) : 100;
     const staminaReserve = parseInt(settings.stamina_reserve || '5');
 
+    const goldMatch = html.match(/id=["']goldbalance["'][^>]*>([\d,.]+)</i);
+    const gold = parseMGNumber(goldMatch ? goldMatch[1] : "0");
+
+    const levelMatch = html.match(/class=["']char_level["'][^>]*>(?:Nivel\s*)?(\d+)/i);
+    const level = levelMatch ? parseInt(levelMatch[1]) : 0;
+
+    logDebug(`[SYNC] Initial state: Level ${level}, Gold ${gold}, Stamina ${stamina}/${maxStamina}`);
+
     // --- STEP 2: AUTOMATION RITUALS ---
-    if (stamina > staminaReserve) {
-      // 2.1 Auto-Manhunt
-      if (settings.auto_manhunt) {
-        logDebug(`[AUTOMATA] Stamina check passed (${stamina} > ${staminaReserve}). Initiating Manhunt...`);
+    const isWorking = html.includes("estás trabajando") || html.includes("trabajando") || html.includes("at work");
+    const onMission = html.includes("misión") || html.includes("Gruta Ancestral") || html.includes("Ancestral Grotto");
+
+    if (!isWorking && !onMission && stamina > staminaReserve) {
+      
+      // 2.1 Ancestral Grotto (PvE Missions)
+      if (settings.auto_grotto) {
+        logDebug(`[AUTOMATA] Initiating Ancestral Grotto ritual...`);
+        const grottoUrl = `https://${server}/index.php?ac=ahnenstaette`;
+        const gPageRes = await fetch(grottoUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
+        const gHtml = await gPageRes.text();
+
+        // Find difficulty index (Easy=0, Medium=1, Hard=2)
+        const difficulty = settings.mission_difficulty || 'medium';
+        const diffMap: Record<string, number> = { 'easy': 0, 'medium': 1, 'hard': 2 };
+        const diffIndex = diffMap[difficulty];
+
+        // Perform mission start
+        const missionPayload = new URLSearchParams({
+          'mision': 'true',
+          'schwierigkeit': diffIndex.toString(),
+          'go': 'Aceptar'
+        });
+
+        const mStartRes = await fetch(grottoUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
+          body: missionPayload
+        });
         
-        // Check if already working/hunting
-        if (html.includes("estás trabajando") || html.includes("trabajando") || html.includes("at work")) {
-          logs.push({ type: 'INFO', message: 'Current ritual in progress. Skipping additional manhunt command.', timestamp: new Date().toISOString() });
-        } else {
-          const duration = settings.manhunt_duration || '60';
-          const manhuntUrl = `https://${server}/index.php?ac=raubzug`;
-          
-          // Visit manhunt page first
-          const mPageRes = await fetch(manhuntUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
-          updateCookies(mPageRes.headers.getSetCookie());
-          
-          // Perform manhunt POST
-          const mPayload = new URLSearchParams({
-            duration: duration,
-            search: 'Empezar la búsqueda' // Common Spanish button text
-          });
-          
-          const mRes = await fetch(manhuntUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
-            body: mPayload
-          });
-          
-          const mHtml = await mRes.text();
-          if (mHtml.includes("has salido de caza") || mRes.status === 200) {
-            logs.push({ type: 'MANHUNT', message: `Shadow Ritual: Manhunt initiated for ${duration} minutes.`, timestamp: new Date().toISOString() });
-            // Re-fetch status to get updated state
-            statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
-            html = await statusResponse.text();
-          }
+        if (mStartRes.status === 200) {
+          logs.push({ type: 'MISSION', message: `Shadow Ritual: Entered Ancestral Grotto (${difficulty}).`, timestamp: new Date().toISOString() });
+          // Refresh status
+          statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
+          html = await statusResponse.text();
         }
       }
+
+      // 2.2 Auto-Manhunt (Only if not already on mission)
+      const updatedOnMission = html.includes("misión") || html.includes("Gruta Ancestral");
+      if (settings.auto_manhunt && !updatedOnMission) {
+        logDebug(`[AUTOMATA] Initiating Manhunt ritual...`);
+        const duration = settings.manhunt_duration || '60';
+        const manhuntUrl = `https://${server}/index.php?ac=raubzug`;
+        
+        const mPayload = new URLSearchParams({
+          duration: duration,
+          search: 'Empezar la búsqueda'
+        });
+        
+        const mRes = await fetch(manhuntUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
+          body: mPayload
+        });
+        
+        if (mRes.status === 200) {
+          logs.push({ type: 'MANHUNT', message: `Shadow Ritual: Manhunt started for ${duration} minutes.`, timestamp: new Date().toISOString() });
+          statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
+          html = await statusResponse.text();
+        }
+      }
+    } else if (isWorking || onMission) {
+      logDebug(`[AUTOMATA] Ritual already in progress. System idle.`);
     } else {
-      logs.push({ type: 'INFO', message: `Stamina too low (${stamina}/${staminaReserve}). Automata resting in the shadows.`, timestamp: new Date().toISOString() });
+      logDebug(`[AUTOMATA] Stamina reserve triggered (${stamina} <= ${staminaReserve}). Resting.`);
     }
 
     // --- STEP 3: FINAL DATA EXTRACTION ---
-    const levelMatch = html.match(/class=["']char_level["'][^>]*>(?:Nivel\s*)?(\d+)/i);
-    const level = levelMatch ? parseInt(levelMatch[1]) : 0;
-    
-    const goldMatch = html.match(/id=["']goldbalance["'][^>]*>([\d,.]+)</i);
-    const gold = parseMGNumber(goldMatch ? goldMatch[1] : "0");
-    
     const skillAvgMatch = html.match(/id=["']statbarSkillAverage["'][^>]*>.*?(?:Promedio de Habilidad:)?\s*([\d,.]+)/i);
     const skillAverage = parseMGNumber(skillAvgMatch ? skillAvgMatch[1] : "0");
 
@@ -205,20 +238,20 @@ export async function fetchMonstersGameData(
 
     const staminaFinalMatch = html.match(/Energía\s+vital:.*?\(\s*(\d+)\s*[|/]\s*(\d+)\s*\)/si);
     const curStamina = staminaFinalMatch ? parseInt(staminaFinalMatch[1]) : 0;
-    const maxStamina = staminaFinalMatch ? parseInt(staminaFinalMatch[2]) : 100;
+    const finMaxStamina = staminaFinalMatch ? parseInt(staminaFinalMatch[2]) : 100;
 
     const race: 'Vampire' | 'Werewolf' = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
     
     if (level > 0) {
-      logs.push({ type: 'INFO', message: `Realm synchronization complete. Status: Level ${level} ${race}.`, timestamp: new Date().toISOString() });
+      logs.push({ type: 'INFO', message: `Realm synchronization complete. Current level: ${level}.`, timestamp: new Date().toISOString() });
     } else {
-      logs.push({ type: 'ERROR', message: 'Identity scrolls illegible. Check debug logs for pattern failures.', timestamp: new Date().toISOString() });
+      logs.push({ type: 'ERROR', message: 'Identity scrolls illegible. Check debug logs.', timestamp: new Date().toISOString() });
     }
 
     return {
       race,
       stats: {
-        level, gold, stamina: curStamina, maxStamina, experience, nextLevelExp, skillAverage,
+        level, gold, stamina: curStamina, maxStamina: finMaxStamina, experience, nextLevelExp, skillAverage,
         attributes: { strength: str, defense: def, dexterity: dex, agility: agi, constitution: con }
       },
       logs
