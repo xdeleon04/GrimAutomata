@@ -1,16 +1,17 @@
-
 'use server';
 /**
- * @fileOverview A flow to simulate fetching data from Moon ID and MonstersGame.
+ * @fileOverview A flow to fetch real data from MonstersGame.
  * 
- * - syncMoonId - Syncs with the specified server using user credentials.
+ * - syncMoonId - Orchestrates the retrieval of character stats and logs from the game server.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { fetchMonstersGameData } from '@/services/monsters-game';
 
 const MoonIdSyncInputSchema = z.object({
   username: z.string(),
+  password: z.string().optional(),
   server: z.string(),
 });
 export type MoonIdSyncInput = z.infer<typeof MoonIdSyncInputSchema>;
@@ -18,8 +19,9 @@ export type MoonIdSyncInput = z.infer<typeof MoonIdSyncInputSchema>;
 const MoonIdSyncOutputSchema = z.object({
   race: z.enum(['Vampire', 'Werewolf']),
   logs: z.array(z.object({
-    type: z.enum(['info', 'battle', 'training', 'loot', 'error', 'manhunt']),
+    type: z.enum(['INFO', 'BATTLE', 'TRAINING', 'LOOT', 'ERROR', 'MANHUNT', 'MISSION']),
     message: z.string(),
+    timestamp: z.string(),
   })),
   stats: z.object({
     level: z.number(),
@@ -49,31 +51,14 @@ const moonIdSyncFlow = ai.defineFlow(
     outputSchema: MoonIdSyncOutputSchema,
   },
   async (input) => {
-    const { output } = await ai.generate({
-      prompt: `You are the GrimAutomata engine core, a high-performance bot for MonstersGame. 
-      Simulate a character synchronization for user "${input.username}" on server "${input.server}".
-      
-      MonstersGame is a browser MMORPG about Vampires vs. Werewolves.
-      
-      Generate a realistic character state:
-      1. Pick a Race: Vampire or Werewolf.
-      2. Generate 4-6 Activity Logs reflecting:
-         - A "Manhunt" (hunting humans for gold).
-         - An "Ancestral Grotto" mission (PvE quest).
-         - A "Training" session (increasing a specific attribute).
-         - A "Battle" against the opposite race.
-      3. Generate stats:
-         - Level: 30-70.
-         - Gold: 100k - 5M.
-         - Stamina: 0-100.
-         - Attributes: Strength, Defense, Dexterity, Agility, Constitution (all 100-500).
-      
-      Tone: Gothic, dark, and technical. Use terms like "Bite", "Howl", "Shadow Realm", "Manhunt duration", "Slayer".
-      Server context: "${input.server}" is the target realm.`,
-      output: { schema: MoonIdSyncOutputSchema },
-    });
+    // We now bypass ai.generate and use the real game service
+    // This ensures data is "not made up with AI" as requested
+    const gameData = await fetchMonstersGameData(input.username, input.password || '', input.server);
+    
+    if (!gameData) {
+      throw new Error('Failed to penetrate the game realm. Check your credentials in the Vault.');
+    }
 
-    if (!output) throw new Error('The void failed to return data.');
-    return output;
+    return gameData;
   }
 );

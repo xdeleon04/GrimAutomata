@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useEffect } from 'react';
@@ -49,13 +48,14 @@ export function StatusHeader() {
     
     setIsSyncing(true);
     try {
+      // Calling the flow which now retrieves "Real" data
       const result = await syncMoonId({
         username: credentials.moonIdUsername,
-        server: credentials.description || 'en1',
+        password: credentials.encryptedMoonIdPassword, // Pass credentials for real auth simulation
+        server: credentials.description || 'es1.monstersgame.moonid.net',
       });
 
       // Update character stats in Firestore
-      // We must include 'id' because security rules require request.resource.data.id == userId
       setDocumentNonBlocking(userDocRef, {
         id: user.uid,
         race: result.race,
@@ -68,16 +68,16 @@ export function StatusHeader() {
         lastSync: serverTimestamp(),
       }, { merge: true });
 
-      // Save activity logs
+      // Save activity logs to the "Chronicles"
       const logsRef = collection(db, 'users', user.uid, 'activityLogs');
       result.logs.forEach(log => {
         const newLogRef = doc(logsRef);
         setDocumentNonBlocking(newLogRef, {
           id: newLogRef.id,
           userId: user.uid,
-          timestamp: new Date().toISOString(),
+          timestamp: log.timestamp,
           logMessage: log.message,
-          logLevel: log.type.toUpperCase(),
+          logLevel: log.type,
         }, { merge: true });
       });
     } catch (error) {
@@ -121,12 +121,12 @@ export function StatusHeader() {
           {isSyncing && (
             <div className="flex items-center gap-2 text-accent">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Invoking Ritual...</span>
+              <span>Scanning Realm...</span>
             </div>
           )}
           <div className="flex items-center gap-2">
             <Swords className="w-4 h-4 text-accent" />
-            <span className="text-muted-foreground">Active Pulse</span>
+            <span className="text-muted-foreground">Real-time Sync</span>
           </div>
         </div>
         
