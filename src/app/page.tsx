@@ -44,8 +44,6 @@ export default function Home() {
   useEffect(() => {
     if (user && db) {
       const userRef = doc(db, 'users', user.uid);
-      // We use setDocumentNonBlocking with merge: true to initialize required fields
-      // without overwriting existing character stats.
       setDocumentNonBlocking(userRef, {
         id: user.uid,
         username: user.displayName || 'Shadow Ritualist',
@@ -98,12 +96,12 @@ export default function Home() {
           <>
             <StatusHeader />
             <QuickStats />
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
               <div className="xl:col-span-1 space-y-6 flex flex-col">
                 <ConfigPanel />
                 <CredentialManager />
               </div>
-              <div className="xl:col-span-2">
+              <div className="xl:col-span-2 h-full">
                 <ActivityLog />
               </div>
             </div>
@@ -142,7 +140,7 @@ export default function Home() {
         );
       case 'chronicles':
         return (
-          <div className="space-y-6 h-[calc(100vh-160px)] animate-in fade-in slide-in-from-bottom-4">
+          <div className="space-y-6 h-[calc(100vh-180px)] animate-in fade-in slide-in-from-bottom-4">
             <h1 className="text-3xl font-headline text-accent">Chronicles</h1>
             <ActivityLog />
           </div>
