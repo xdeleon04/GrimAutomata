@@ -1,0 +1,17 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "hero-bg",
+      "description": "Dark gothic castle background",
+      "imageUrl": "https://picsum.photos/seed/grim1/1200/800",
+      "imageHint": "gothic castle"
+    },
+    {
+      "id": "character-avatar",
+      "description": "Dark vampire-like character avatar",
+      "imageUrl": "https://picsum.photos/seed/grim2/200/200",
+      "imageHint": "vampire portrait"
+    }
+  ]
+}
