@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "MoonIdCredential": {
@@ -108,7 +109,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user of the GrimAutomata application.",
+      "description": "Represents a user of the GrimAutomata application, including character stats from MonstersGame.",
       "properties": {
         "id": {
           "type": "string",
@@ -127,6 +128,41 @@
           "type": "string",
           "description": "Date and time when the user account was created.",
           "format": "date-time"
+        },
+        "race": {
+          "type": "string",
+          "enum": ["Vampire", "Werewolf"],
+          "description": "The character's race in MonstersGame."
+        },
+        "level": {
+          "type": "number",
+          "description": "The character's current level."
+        },
+        "gold": {
+          "type": "number",
+          "description": "The character's current gold amount."
+        },
+        "stamina": {
+          "type": "number",
+          "description": "Current stamina points."
+        },
+        "experience": {
+          "type": "number",
+          "description": "Current experience points."
+        },
+        "nextLevelExp": {
+          "type": "number",
+          "description": "Experience points required for the next level."
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "strength": { "type": "number" },
+            "defense": { "type": "number" },
+            "dexterity": { "type": "number" },
+            "agility": { "type": "number" },
+            "constitution": { "type": "number" }
+          }
         }
       },
       "required": [

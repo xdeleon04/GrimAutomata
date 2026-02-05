@@ -21,6 +21,11 @@ export function StatusHeader() {
     return doc(db, 'users', user.uid, 'moonIdCredentials', 'primary');
   }, [db, user]);
 
+  const userDocRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user]);
+
   const { data: credentials } = useDoc(credentialRef);
 
   useEffect(() => {
@@ -28,8 +33,8 @@ export function StatusHeader() {
     if (isRunning) {
       interval = setInterval(() => {
         setUptime(prev => prev + 1);
-        // Periodic sync simulation
-        if (uptime > 0 && uptime % 30 === 0) {
+        // Periodic sync simulation every 60 seconds
+        if (uptime > 0 && uptime % 60 === 0) {
           triggerSync();
         }
       }, 1000);
@@ -40,7 +45,7 @@ export function StatusHeader() {
   }, [isRunning, uptime]);
 
   const triggerSync = async () => {
-    if (!user || !db || !credentials) return;
+    if (!user || !db || !credentials || !userDocRef) return;
     
     setIsSyncing(true);
     try {
@@ -49,11 +54,22 @@ export function StatusHeader() {
         server: credentials.description || 'en1',
       });
 
+      // Update character stats in Firestore
+      setDocumentNonBlocking(userDocRef, {
+        race: result.race,
+        level: result.stats.level,
+        gold: result.stats.gold,
+        stamina: result.stats.stamina,
+        experience: result.stats.experience,
+        nextLevelExp: result.stats.nextLevelExp,
+        attributes: result.stats.attributes,
+        lastSync: serverTimestamp(),
+      }, { merge: true });
+
+      // Save activity logs
       const logsRef = collection(db, 'users', user.uid, 'activityLogs');
       result.logs.forEach(log => {
-        // Generate a new document reference to get a random ID
         const newLogRef = doc(logsRef);
-        // Use setDocumentNonBlocking to ensure the 'id' field matches the doc ID as per security rules
         setDocumentNonBlocking(newLogRef, {
           id: newLogRef.id,
           userId: user.uid,

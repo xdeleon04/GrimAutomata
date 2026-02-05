@@ -4,45 +4,81 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Skull, Coins, Zap, Shield, Swords, Heart, Target, Wind } from 'lucide-react';
+import { Skull, Coins, Zap, Shield, Swords, Heart, Target, Wind, Loader2 } from 'lucide-react';
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
 
 export function QuickStats() {
-  // In a real app, these would come from Firestore via the useDoc hook
-  // For now, we show the structure expected by MonstersGame players
+  const { user } = useUser();
+  const db = useFirestore();
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user]);
+
+  const { data: userData, isLoading } = useDoc(userDocRef);
+
+  if (isLoading) {
+    return (
+      <div className="h-48 flex items-center justify-center text-accent animate-pulse font-mono text-sm tracking-widest">
+        <Loader2 className="w-6 h-6 animate-spin mr-2" /> READING SCROLLS...
+      </div>
+    );
+  }
+
+  const stats = userData || {
+    race: 'Vampire',
+    level: 0,
+    gold: 0,
+    stamina: 0,
+    experience: 0,
+    nextLevelExp: 100,
+    attributes: {
+      strength: 0,
+      defense: 0,
+      dexterity: 0,
+      agility: 0,
+      constitution: 0
+    }
+  };
+
+  const xpProgress = stats.nextLevelExp > 0 ? (stats.experience / stats.nextLevelExp) * 100 : 0;
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
-          label="Vampire Level" 
-          value="52" 
+          label={`${stats.race} Level`} 
+          value={stats.level.toString()} 
           icon={<Skull className="text-accent w-4 h-4" />} 
-          progress={72} 
-          progressLabel="XP: 42,100 / 58,000"
+          progress={xpProgress} 
+          progressLabel={`XP: ${stats.experience.toLocaleString()} / ${stats.nextLevelExp.toLocaleString()}`}
         />
         <StatCard 
           label="Blood Gold" 
-          value="2,450,120" 
+          value={stats.gold.toLocaleString()} 
           icon={<Coins className="text-accent w-4 h-4" />} 
         />
         <StatCard 
           label="Stamina" 
-          value="88 / 100" 
+          value={`${stats.stamina} / 100`} 
           icon={<Zap className="text-accent w-4 h-4" />} 
-          progress={88}
+          progress={stats.stamina}
         />
         <StatCard 
           label="Shadow Power" 
-          value="12,842" 
+          value={(Object.values(stats.attributes || {}).reduce((a: number, b: number) => a + b, 0)).toString()} 
           icon={<Shield className="text-accent w-4 h-4" />} 
         />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <AttributeMiniCard label="STR" value="342" icon={<Swords className="w-3 h-3" />} />
-        <AttributeMiniCard label="DEF" value="315" icon={<Shield className="w-3 h-3" />} />
-        <AttributeMiniCard label="DEX" value="298" icon={<Target className="w-3 h-3" />} />
-        <AttributeMiniCard label="AGI" value="275" icon={<Wind className="w-3 h-3" />} />
-        <AttributeMiniCard label="CON" value="320" icon={<Heart className="w-3 h-3" />} />
+        <AttributeMiniCard label="STR" value={stats.attributes?.strength?.toString() || '0'} icon={<Swords className="w-3 h-3" />} />
+        <AttributeMiniCard label="DEF" value={stats.attributes?.defense?.toString() || '0'} icon={<Shield className="w-3 h-3" />} />
+        <AttributeMiniCard label="DEX" value={stats.attributes?.dexterity?.toString() || '0'} icon={<Target className="w-3 h-3" />} />
+        <AttributeMiniCard label="AGI" value={stats.attributes?.agility?.toString() || '0'} icon={<Wind className="w-3 h-3" />} />
+        <AttributeMiniCard label="CON" value={stats.attributes?.constitution?.toString() || '0'} icon={<Heart className="w-3 h-3" />} />
       </div>
     </div>
   );

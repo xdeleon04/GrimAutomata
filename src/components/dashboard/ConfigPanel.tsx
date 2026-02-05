@@ -8,9 +8,55 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, Swords, BookOpen, Warehouse, Ghost, MapPin } from 'lucide-react';
+import { Settings, Swords, BookOpen, Warehouse, Ghost, MapPin, Loader2 } from 'lucide-react';
+import { useUser, useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
+import { collection, doc } from 'firebase/firestore';
 
 export function ConfigPanel() {
+  const { user } = useUser();
+  const db = useFirestore();
+
+  const settingsQuery = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return collection(db, 'users', user.uid, 'automationSettings');
+  }, [db, user]);
+
+  const { data: settings, isLoading } = useCollection(settingsQuery);
+
+  const getSetting = (name: string, defaultValue: any) => {
+    const setting = settings?.find(s => s.settingName === name);
+    if (!setting) return defaultValue;
+    try {
+      return JSON.parse(setting.settingValue);
+    } catch {
+      return setting.settingValue;
+    }
+  };
+
+  const updateSetting = (name: string, value: any) => {
+    if (!db || !user) return;
+    const settingId = name.toLowerCase().replace(/\s+/g, '_');
+    const settingRef = doc(db, 'users', user.uid, 'automationSettings', settingId);
+    
+    setDocumentNonBlocking(settingRef, {
+      id: settingId,
+      userId: user.uid,
+      settingName: name,
+      settingValue: JSON.stringify(value),
+      description: `Automated setting for ${name}`
+    }, { merge: true });
+  };
+
+  if (isLoading) {
+    return (
+      <Card className="h-full gothic-border bg-card/50">
+        <CardContent className="h-64 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-accent" />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="h-full gothic-border bg-card/50">
       <CardHeader>
@@ -35,12 +81,18 @@ export function ConfigPanel() {
                   <Label>Auto-Manhunt</Label>
                   <p className="text-xs text-muted-foreground">Hunt humans for gold and XP.</p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={getSetting('auto_manhunt', true)} 
+                  onCheckedChange={(checked) => updateSetting('auto_manhunt', checked)}
+                />
               </div>
               
               <div className="space-y-2">
                 <Label className="text-xs">Hunt Duration (Minutes)</Label>
-                <Select defaultValue="60">
+                <Select 
+                  value={getSetting('manhunt_duration', '60')} 
+                  onValueChange={(value) => updateSetting('manhunt_duration', value)}
+                >
                   <SelectTrigger className="h-8 bg-background/50">
                     <SelectValue placeholder="Select duration" />
                   </SelectTrigger>
@@ -58,7 +110,10 @@ export function ConfigPanel() {
                   <Label>PVP: Attack Opponents</Label>
                   <p className="text-xs text-muted-foreground">Automatically attack members of the opposite race.</p>
                 </div>
-                <Switch />
+                <Switch 
+                  checked={getSetting('pvp_attack', false)} 
+                  onCheckedChange={(checked) => updateSetting('pvp_attack', checked)}
+                />
               </div>
             </div>
           </TabsContent>
@@ -69,7 +124,10 @@ export function ConfigPanel() {
                 <Label>Auto-Training</Label>
                 <p className="text-xs text-muted-foreground">Spend gold on character attributes.</p>
               </div>
-              <Switch defaultChecked />
+              <Switch 
+                checked={getSetting('auto_training', true)} 
+                onCheckedChange={(checked) => updateSetting('auto_training', checked)}
+              />
             </div>
             
             <div className="space-y-3">
@@ -78,7 +136,11 @@ export function ConfigPanel() {
                 {['Strength', 'Defense', 'Dexterity', 'Agility', 'Constitution'].map(stat => (
                   <div key={stat} className="flex items-center justify-between p-2 border rounded-md text-xs bg-muted/20">
                     <span>{stat}</span>
-                    <Switch size="sm" defaultChecked />
+                    <Switch 
+                      size="sm" 
+                      checked={getSetting(`train_${stat.toLowerCase()}`, true)}
+                      onCheckedChange={(checked) => updateSetting(`train_${stat.toLowerCase()}`, checked)}
+                    />
                   </div>
                 ))}
               </div>
@@ -91,12 +153,18 @@ export function ConfigPanel() {
                 <Label>Ancestral Grotto</Label>
                 <p className="text-xs text-muted-foreground">Automate PvE missions.</p>
               </div>
-              <Switch defaultChecked />
+              <Switch 
+                checked={getSetting('auto_grotto', true)} 
+                onCheckedChange={(checked) => updateSetting('auto_grotto', checked)}
+              />
             </div>
             
             <div className="space-y-2">
               <Label className="text-xs">Mission Difficulty</Label>
-              <Select defaultValue="medium">
+              <Select 
+                value={getSetting('mission_difficulty', 'medium')} 
+                onValueChange={(value) => updateSetting('mission_difficulty', value)}
+              >
                 <SelectTrigger className="h-8 bg-background/50">
                   <SelectValue placeholder="Select difficulty" />
                 </SelectTrigger>
@@ -111,9 +179,15 @@ export function ConfigPanel() {
             <div className="space-y-4">
               <div className="flex justify-between">
                 <Label className="text-xs">HP Retreat Threshold</Label>
-                <span className="text-xs text-accent">50% HP</span>
+                <span className="text-xs text-accent">{getSetting('hp_retreat', 50)}% HP</span>
               </div>
-              <Slider defaultValue={[50]} max={90} step={1} className="py-2" />
+              <Slider 
+                defaultValue={[getSetting('hp_retreat', 50)]} 
+                max={90} 
+                step={1} 
+                className="py-2" 
+                onValueCommit={(value) => updateSetting('hp_retreat', value[0])}
+              />
             </div>
           </TabsContent>
 
@@ -123,7 +197,10 @@ export function ConfigPanel() {
                 <Label>Shadow Stealth</Label>
                 <p className="text-xs text-muted-foreground">Anti-detection delays between rituals.</p>
               </div>
-              <Switch defaultChecked />
+              <Switch 
+                checked={getSetting('stealth_mode', true)} 
+                onCheckedChange={(checked) => updateSetting('stealth_mode', checked)}
+              />
             </div>
             
             <div className="flex items-center justify-between">
@@ -131,15 +208,24 @@ export function ConfigPanel() {
                 <Label>Auto-Repair Gear</Label>
                 <p className="text-xs text-muted-foreground">Repair items when durability is low.</p>
               </div>
-              <Switch defaultChecked />
+              <Switch 
+                checked={getSetting('auto_repair', true)} 
+                onCheckedChange={(checked) => updateSetting('auto_repair', checked)}
+              />
             </div>
 
             <div className="space-y-4">
               <div className="flex justify-between">
                 <Label className="text-xs">Stamina Reserve</Label>
-                <span className="text-xs text-accent">5 Points</span>
+                <span className="text-xs text-accent">{getSetting('stamina_reserve', 5)} Points</span>
               </div>
-              <Slider defaultValue={[5]} max={20} step={1} className="py-2" />
+              <Slider 
+                defaultValue={[getSetting('stamina_reserve', 5)]} 
+                max={20} 
+                step={1} 
+                className="py-2" 
+                onValueCommit={(value) => updateSetting('stamina_reserve', value[0])}
+              />
             </div>
           </TabsContent>
         </Tabs>
