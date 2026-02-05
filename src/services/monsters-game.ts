@@ -134,29 +134,29 @@ export async function fetchMonstersGameData(
 
     const html = await statusResponse.text();
 
-    // Stats Extraction using regex for the provided Spanish HTML structure
-    const levelMatch = html.match(/class="char_level">Nivel\s*(\d+)/i) || html.match(/class="char_level">(\d+)/i);
+    // Stats Extraction using flexible regex
+    const levelMatch = html.match(/class=["']char_level["'][^>]*>(?:Nivel\s*)?(\d+)/i);
     const level = levelMatch ? parseInt(levelMatch[1]) : 0;
+    logDebug(`[DEBUG] Parsed Level: ${level}`);
     
-    // Gold extraction from #goldbalance in the statbar
-    const goldMatch = html.match(/id="goldbalance">([\d,.]+)</i);
+    // Gold extraction from #goldbalance
+    const goldMatch = html.match(/id=["']goldbalance["'][^>]*>([\d,.]+)</i);
     const gold = parseMGNumber(goldMatch ? goldMatch[1] : "0");
+    logDebug(`[DEBUG] Parsed Gold: ${gold}`);
     
-    // Skill Average (Shadow Power candidate)
-    const skillAvgMatch = html.match(/id="statbarSkillAverage"[^>]*>Promedio de Habilidad:\s*([\d,.]+)/i) || 
-                         html.match(/Promedio de Habilidad:.*?([\d,.]+)/i);
+    // Skill Average (Shadow Power)
+    const skillAvgMatch = html.match(/id=["']statbarSkillAverage["'][^>]*>.*?(?:Promedio de Habilidad:)?\s*([\d,.]+)/i);
     const skillAverage = parseMGNumber(skillAvgMatch ? skillAvgMatch[1] : "0");
+    logDebug(`[DEBUG] Parsed Skill Average: ${skillAverage}`);
 
     // Experience: (current|max) format
-    const expMatch = html.match(/Experiencia:\s*([\d.]+)\s*[\/|]\s*([\d.]+)/i) || 
-                     html.match(/Experiencia total:.*?\((\d+)[|/](\d+)\)/si) ||
-                     html.match(/Experiencia:\s*(\d+)\s*\/\s*(\d+)/i);
-    const experience = expMatch ? parseInt(expMatch[1].replace(/\./g, '')) : 0;
-    const nextLevelExp = expMatch ? parseInt(expMatch[2].replace(/\./g, '')) : 100;
+    const expMatch = html.match(/Experiencia.*?\(\s*(\d+)\s*[|/]\s*(\d+)\s*\)/i);
+    const experience = expMatch ? parseInt(expMatch[1]) : 0;
+    const nextLevelExp = expMatch ? parseInt(expMatch[2]) : 100;
 
-    // Attributes from the table
+    // Attributes
     const findStat = (label: string) => {
-      const regex = new RegExp(`${label}:.*?\\((\\d+)\\)`, 'si');
+      const regex = new RegExp(`${label}:.*?\\(\\s*(\\d+)\\s*\\)`, 'si');
       const match = html.match(regex);
       return match ? parseInt(match[1]) : 0;
     };
@@ -167,10 +167,12 @@ export async function fetchMonstersGameData(
     const con = findStat('Resistencia');
     const dex = findStat('Destreza');
 
-    // Stamina/Energy from the table
-    const staminaMatch = html.match(/Energía\s+vital:.*?\((\d+)[|/](\d+)\)/si);
+    // Stamina/Energy ratio extraction
+    const staminaMatch = html.match(/Energía\s+vital:.*?\(\s*(\d+)\s*[|/]\s*(\d+)\s*\)/si) || 
+                         html.match(/Energía\s+vital:\s*(\d+)/i);
     const stamina = staminaMatch ? parseInt(staminaMatch[1]) : 0;
-    const maxStamina = staminaMatch ? parseInt(staminaMatch[2]) : 100;
+    const maxStamina = (staminaMatch && staminaMatch[2]) ? parseInt(staminaMatch[2]) : 100;
+    logDebug(`[DEBUG] Parsed Stamina: ${stamina}/${maxStamina}`);
 
     const race: 'Vampire' | 'Werewolf' = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
     
@@ -185,7 +187,9 @@ export async function fetchMonstersGameData(
         message: 'Currently performing a ritual of labor (Working). System on standby.',
         timestamp: new Date().toISOString()
       });
-    } else if (level > 0) {
+    }
+
+    if (level > 0) {
       logs.push({
         type: 'INFO',
         message: `Sanctuary synchronization complete. Level ${level} ${race} scrolls verified.`,
@@ -194,10 +198,9 @@ export async function fetchMonstersGameData(
     } else {
       logs.push({
         type: 'ERROR',
-        message: 'Realm accessed, but identity scrolls were illegible (Parsing failure).',
+        message: 'Realm accessed, but identity scrolls were illegible (Parsing failure). Check debug logs.',
         timestamp: new Date().toISOString()
       });
-      logDebug(`[DEBUG] HTML Fragment for debugging: ${html.substring(0, 500)}`);
     }
 
     return {
