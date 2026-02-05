@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target, Search, Zap } from 'lucide-react';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { collection, doc } from 'firebase/firestore';
 
@@ -22,7 +22,16 @@ export function ConfigPanel() {
     return collection(db, 'users', user.uid, 'automationSettings');
   }, [db, user]);
 
-  const { data: settings, isLoading } = useCollection(settingsQuery);
+  const userDocRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user]);
+
+  const { data: settings, isLoading: isSettingsLoading } = useCollection(settingsQuery);
+  const { data: userData, isLoading: isUserDocLoading } = useDoc(userDocRef);
+
+  const isLoading = isSettingsLoading || isUserDocLoading;
+  const maxStamina = userData?.maxStamina || 1000;
 
   const getSetting = (name: string, defaultValue: any) => {
     const setting = settings?.find(s => s.settingName === name);
@@ -238,12 +247,12 @@ export function ConfigPanel() {
               </div>
               <Slider 
                 defaultValue={[getSetting('stamina_reserve', 5)]} 
-                max={50} 
+                max={maxStamina} 
                 step={1} 
                 className="py-2" 
                 onValueCommit={(value) => updateSetting('stamina_reserve', value[0])}
               />
-              <p className="text-[10px] text-muted-foreground italic">Rituals (PvP/PvE) will pause if stamina falls below this level.</p>
+              <p className="text-[10px] text-muted-foreground italic">Rituals (PvP/PvE) will pause if stamina falls below this level. Max value is bound to your current character's stamina capacity.</p>
             </div>
 
             <div className="flex items-center justify-between border-t pt-4">
