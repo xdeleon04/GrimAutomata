@@ -1,7 +1,6 @@
-
 "use client"
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Terminal, Shield, Swords, Coins, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -25,6 +24,16 @@ const MOCK_LOGS: LogEntry[] = [
 ];
 
 export function ActivityLog() {
+  const [currentTime, setCurrentTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentTime(new Date().toLocaleTimeString('en-GB', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit' 
+    }));
+  }, []);
+
   const getIcon = (type: LogEntry['type']) => {
     switch (type) {
       case 'battle': return <Swords className="w-4 h-4 text-red-400" />;
@@ -61,7 +70,9 @@ export function ActivityLog() {
             </div>
           ))}
           <div className="flex gap-3 text-accent animate-pulse">
-            <span className="text-muted-foreground/60">[{new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
+            <span className="text-muted-foreground/60">
+              [{currentTime || '--:--:--'}]
+            </span>
             <span className="mt-1"><Terminal className="w-4 h-4" /></span>
             <span>Awaiting next ritual...</span>
           </div>
