@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -43,12 +44,15 @@ export function StatusHeader() {
       interval = setInterval(() => {
         setUptime(prev => prev + 1);
         
+        // Count down the cooldown in real-time
+        setCooldown(prev => Math.max(0, prev - 1));
+        
         const now = Date.now();
         const secondsSinceLastSync = (now - lastSyncRef.current) / 1000;
         
         // Decide whether to trigger sync based on state
-        // If in cooldown, sync every 60s
-        // If not in cooldown, we might sync slightly more often to be reactive (e.g. every 30s)
+        // If in cooldown, sync every 60s to check for updates
+        // If not in cooldown, we sync every 30s to be reactive
         const syncInterval = cooldown > 0 ? 60 : 30;
         
         if (secondsSinceLastSync >= syncInterval && !isSyncing) {
@@ -116,13 +120,12 @@ export function StatusHeader() {
       });
 
       // If we performed a ritual action, we might want to sync again SOON
-      // but only if we aren't now in cooldown. If we are in cooldown, we wait the interval.
+      // but only if we aren't now in cooldown.
       const performedAction = result.logs.some(l => 
         l.type === 'BATTLE' || l.type === 'MANHUNT' || l.type === 'MISSION'
       );
       
       if (performedAction && result.pvpCooldown === 0) {
-        // Trigger another sync quickly to check next action
         setTimeout(() => triggerSync(), 5000);
       }
 

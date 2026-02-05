@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Service for interacting with MonstersGame via MoonID.
@@ -170,21 +171,23 @@ export async function fetchMonstersGameData(
         const huntPageRes = await fetch(huntPageUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
         const huntHtml = await huntPageRes.text();
 
-        // Check for "You can only fight every 15 minutes" text
-        const hasCooldownText = huntHtml.includes('every 15 minutes') || huntHtml.includes('cada 15 minutos');
+        // Check for cooldown text or the COUNTER div
+        const hasCooldownText = huntHtml.includes('every 15 minutes') || huntHtml.includes('cada 15 minutos') || huntHtml.includes('id="COUNTER"');
         
-        // Parse SecondsCOUNTER from the script
+        // Parse SecondsCOUNTER from the script directly from the JS
         const secondsMatch = huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
         pvpCooldown = secondsMatch ? parseInt(secondsMatch[1]) : 0;
         
         if (pvpCooldown > 0 || hasCooldownText) {
-          const displayTime = pvpCooldown > 0 ? `${Math.floor(pvpCooldown/60)}m ${pvpCooldown%60}s` : "Waiting for ritual reset";
+          const m = Math.floor(pvpCooldown / 60);
+          const s = pvpCooldown % 60;
+          const displayTime = pvpCooldown > 0 ? `${m}m ${s}s` : "Waiting for ritual reset";
           logs.push({ 
             type: 'INFO', 
             message: `Shadow Ritual: Resting. PvP cooldown active (${displayTime}).`, 
             timestamp: new Date().toISOString() 
           });
-          logDebug(`[AUTOMATA] Cooldown detected: ${pvpCooldown}s`);
+          logDebug(`[AUTOMATA] Cooldown detected via SecondsCOUNTER: ${pvpCooldown}s`);
         } else {
           const humanLimitReached = huntHtml.includes("used all of today's hunting time") || huntHtml.includes("ya has usado todo tu tiempo de caza");
           
@@ -211,7 +214,6 @@ export async function fetchMonstersGameData(
               
               if (searchHtml.includes("successful") || searchHtml.includes("Exitoso")) {
                 const gegnerIdMatch = searchHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
-                // Extract rival name from search success text
                 const opponentNameMatch = searchHtml.match(/tracked down the (?:Hombre Lobo|Vampiro|Adversario)\s+([^ ]+)\s+and/i)
                                        || searchHtml.match(/headerRow["'][^>]*>(?:Hombre Lobo|Vampiro)\s+(.*?)<\/div>/i);
                 const opponentName = opponentNameMatch ? opponentNameMatch[1].trim() : (targetName || "Rival");
