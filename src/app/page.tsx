@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatusHeader } from '@/components/dashboard/StatusHeader';
 import { ActivityLog } from '@/components/dashboard/ActivityLog';
 import { ConfigPanel } from '@/components/dashboard/ConfigPanel';
@@ -22,22 +22,38 @@ import {
   History, 
   Lock, 
   User as UserIcon, 
-  Info, 
   Moon, 
   LogIn,
   LayoutDashboard,
   ExternalLink
 } from 'lucide-react';
-import { useUser, useAuth, initiateAnonymousSignIn } from '@/firebase';
+import { useUser, useAuth, useFirestore, initiateAnonymousSignIn, setDocumentNonBlocking } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { doc } from 'firebase/firestore';
 
 type View = 'dashboard' | 'profile' | 'rituals' | 'chronicles' | 'vault';
 
 export default function Home() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
+  const db = useFirestore();
   const [activeView, setActiveView] = useState<View>('dashboard');
+
+  // Initialize the user profile document in Firestore once the user is authenticated
+  useEffect(() => {
+    if (user && db) {
+      const userRef = doc(db, 'users', user.uid);
+      // We use setDocumentNonBlocking with merge: true to initialize required fields
+      // without overwriting existing character stats.
+      setDocumentNonBlocking(userRef, {
+        id: user.uid,
+        username: user.displayName || 'Shadow Ritualist',
+        email: user.email || `anonymous-${user.uid}@grimautomata.void`,
+        creationDate: new Date().toISOString(),
+      }, { merge: true });
+    }
+  }, [user, db]);
 
   if (isUserLoading) {
     return (
