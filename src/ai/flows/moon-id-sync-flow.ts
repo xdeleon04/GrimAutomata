@@ -13,13 +13,14 @@ const MoonIdSyncInputSchema = z.object({
   username: z.string(),
   password: z.string().optional(),
   server: z.string(),
+  debug: z.boolean().optional(),
 });
 export type MoonIdSyncInput = z.infer<typeof MoonIdSyncInputSchema>;
 
 const MoonIdSyncOutputSchema = z.object({
   race: z.enum(['Vampire', 'Werewolf']),
   logs: z.array(z.object({
-    type: z.enum(['INFO', 'BATTLE', 'TRAINING', 'LOOT', 'ERROR', 'MANHUNT', 'MISSION']),
+    type: z.enum(['INFO', 'BATTLE', 'TRAINING', 'LOOT', 'ERROR', 'MANHUNT', 'MISSION', 'DEBUG']),
     message: z.string(),
     timestamp: z.string(),
   })),
@@ -52,8 +53,12 @@ const moonIdSyncFlow = ai.defineFlow(
   },
   async (input) => {
     // We now bypass ai.generate and use the real game service
-    // This ensures data is "not made up with AI" as requested
-    const gameData = await fetchMonstersGameData(input.username, input.password || '', input.server);
+    const gameData = await fetchMonstersGameData(
+      input.username, 
+      input.password || '', 
+      input.server,
+      input.debug
+    );
     
     if (!gameData) {
       throw new Error('Failed to penetrate the game realm. Check your credentials in the Vault.');

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { Power, Play, Square, Activity, ShieldAlert, Swords, Loader2 } from 'lucide-react';
+import { Power, Play, Square, Activity, ShieldAlert, Swords, Loader2, Bug, BugOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useUser, useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
@@ -14,6 +14,7 @@ export function StatusHeader() {
   const [isRunning, setIsRunning] = useState(false);
   const [uptime, setUptime] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
 
   const credentialRef = useMemoFirebase(() => {
     if (!db || !user) return null;
@@ -48,11 +49,11 @@ export function StatusHeader() {
     
     setIsSyncing(true);
     try {
-      // Calling the flow which now retrieves "Real" data
       const result = await syncMoonId({
         username: credentials.moonIdUsername,
-        password: credentials.encryptedMoonIdPassword, // Pass credentials for real auth simulation
+        password: credentials.encryptedMoonIdPassword,
         server: credentials.description || 'es1.monstersgame.moonid.net',
+        debug: debugMode
       });
 
       // Update character stats in Firestore
@@ -124,6 +125,18 @@ export function StatusHeader() {
               <span>Scanning Realm...</span>
             </div>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDebugMode(!debugMode)}
+            className={cn(
+              "text-[10px] uppercase tracking-widest gap-2",
+              debugMode ? "text-purple-400" : "text-muted-foreground"
+            )}
+          >
+            {debugMode ? <Bug className="w-3 h-3" /> : <BugOff className="w-3 h-3" />}
+            Debug: {debugMode ? 'ON' : 'OFF'}
+          </Button>
           <div className="flex items-center gap-2">
             <Swords className="w-4 h-4 text-accent" />
             <span className="text-muted-foreground">Real-time Sync</span>

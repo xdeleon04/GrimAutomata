@@ -1,9 +1,8 @@
-
 "use client"
 
 import React, { useState, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Terminal, Shield, Swords, Coins, TrendingUp, AlertCircle, Ghost, MapPin, Skull } from 'lucide-react';
+import { Terminal, Shield, Swords, Coins, TrendingUp, AlertCircle, Ghost, MapPin, Skull, Bug } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, orderBy, limit } from 'firebase/firestore';
@@ -34,7 +33,7 @@ export function ActivityLog() {
     return query(
       collection(db, 'users', user.uid, 'activityLogs'),
       orderBy('timestamp', 'desc'),
-      limit(50)
+      limit(100)
     );
   }, [db, user]);
 
@@ -49,6 +48,7 @@ export function ActivityLog() {
       case 'mission': return <MapPin className="w-4 h-4 text-purple-400" />;
       case 'info': return <Terminal className="w-4 h-4 text-muted-foreground" />;
       case 'error': return <AlertCircle className="w-4 h-4 text-red-500" />;
+      case 'debug': return <Bug className="w-4 h-4 text-purple-400" />;
       default: return <Ghost className="w-4 h-4 text-muted-foreground" />;
     }
   };
@@ -83,7 +83,8 @@ export function ActivityLog() {
                 log.logLevel === 'ERROR' && "text-red-500",
                 log.logLevel === 'BATTLE' && "text-red-200",
                 log.logLevel === 'MANHUNT' && "text-orange-200",
-                log.logLevel === 'LOOT' && "text-accent/90"
+                log.logLevel === 'LOOT' && "text-accent/90",
+                log.logLevel === 'DEBUG' && "text-purple-400/80 italic text-[11px]"
               )}>
                 {log.logMessage}
               </span>
