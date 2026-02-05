@@ -188,12 +188,12 @@ export async function fetchMonstersGameData(
     if (!isBusy && pvpCooldown === 0) {
       if (stamina <= thresholdValue) {
         if (settings.auto_work !== false) {
-          // Graveyard restores stamina over time. Base estimation used for ritual timing.
-          const pointsNeeded = thresholdValue - stamina + (maxStamina * 0.1);
-          const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 20))); 
+          // Stamina/HP restores at a rate of 10 per hour according to the guide.
+          const pointsNeeded = thresholdValue - stamina + (maxStamina * 0.1); 
+          const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 10))); 
           
           const workUrl = `https://${server}/index.php?ac=friedhof`;
-          logDebug(`[AUTOMATA] Energy below threshold (${stamina}/${thresholdValue.toFixed(0)}). Initiating graveyard shift for ${hoursToWork}h.`);
+          logDebug(`[AUTOMATA] Energy below threshold (${stamina}/${thresholdValue.toFixed(0)}). Initiating graveyard shift for ${hoursToWork}h (Rate: 10/hr).`);
           
           const workPayload = new URLSearchParams({
             ac: 'friedhof',
