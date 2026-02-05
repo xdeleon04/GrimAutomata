@@ -130,7 +130,16 @@ export async function fetchMonstersGameData(
     const staminaReserve = parseInt(settings.stamina_reserve || '5');
 
     const isBusy = html.includes("trabajando") || html.includes("misión") || html.includes("Gruta Ancestral");
-    logDebug(`[SYNC] Stamina: ${stamina}/${maxStamina} | Busy: ${isBusy}`);
+    logDebug(`[SYNC] Stamina: ${stamina}/${maxStamina} | Busy: ${isBusy} | Threshold: ${staminaReserve}`);
+
+    // Log stamina conservation if applicable
+    if (stamina <= staminaReserve && !isBusy) {
+      logs.push({ 
+        type: 'INFO', 
+        message: `Shadow Ritual: Conserving energy. Current stamina (${stamina}) is below threshold (${staminaReserve}).`, 
+        timestamp: new Date().toISOString() 
+      });
+    }
 
     // --- STEP 2: AUTOMATION RITUALS ---
     if (!isBusy && stamina > staminaReserve) {
@@ -140,12 +149,9 @@ export async function fetchMonstersGameData(
       const huntHtml = await huntPageRes.text();
 
       // --- ADVANCED COOLDOWN DETECTION ---
-      // The COUNTER div is often empty in raw HTML because it's populated via JS.
-      // We must parse the JS variables directly.
+      // SecondsCOUNTER is populated via JS variables
       const secondsMatch = huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
       const secondsRemaining = secondsMatch ? parseInt(secondsMatch[1]) : 0;
-      
-      const tagContentMatch = huntHtml.match(/id\s*=\s*["']COUNTER["'][^>]*>\s*([\d:]+)\s*</i);
       
       let cooldownDisplay = 'NONE';
       if (secondsRemaining > 0) {
@@ -153,11 +159,9 @@ export async function fetchMonstersGameData(
         const m = Math.floor((secondsRemaining % 3600) / 60);
         const s = secondsRemaining % 60;
         cooldownDisplay = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-      } else if (tagContentMatch && tagContentMatch[1]) {
-        cooldownDisplay = tagContentMatch[1];
       }
 
-      logDebug(`[AUTOMATA] Cooldown check result: ${cooldownDisplay}`);
+      logDebug(`[AUTOMATA] Cooldown scan result: ${cooldownDisplay}`);
 
       const hasCooldownText = huntHtml.includes("every 15 minutes") || huntHtml.includes("cada 15 minutos");
 
@@ -185,7 +189,7 @@ export async function fetchMonstersGameData(
               searchopt: strategy,
             });
 
-            logDebug(`[AUTOMATA] Searching district for [${targetName || 'random rivals'}]...`);
+            logDebug(`[AUTOMATA] Searching district for [${targetName || 'random rivals'}] with strategy [${strategy}]...`);
             const pvpSearchRes = await fetch(huntPageUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
@@ -249,7 +253,7 @@ export async function fetchMonstersGameData(
       }
 
       // Grotto Fallback
-      if (settings.auto_grotto && !logs.some(l => l.type === 'MANHUNT' || l.type === 'BATTLE')) {
+      if (settings.auto_grotto && !logs.some(l => l.type === 'MANHUNT' || l.type === 'BATTLE' || l.type === 'INFO' && l.message.includes('Resting'))) {
         const grottoUrl = `https://${server}/index.php?ac=ahnenstaette`;
         const gCheck = await fetch(grottoUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
         const gHtml = await gCheck.text();

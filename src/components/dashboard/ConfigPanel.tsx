@@ -8,7 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target, Search } from 'lucide-react';
+import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target, Search, Zap } from 'lucide-react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { collection, doc } from 'firebase/firestore';
@@ -29,7 +29,7 @@ export function ConfigPanel() {
     if (!setting) return defaultValue;
     try {
       const val = JSON.parse(setting.settingValue);
-      // Ensure we don't return an empty string for Select components
+      // Ensure we don't return an empty string for Select components to avoid Radix UI runtime errors
       if (val === "" && typeof defaultValue === 'string' && defaultValue !== "") {
         return defaultValue;
       }
@@ -229,7 +229,24 @@ export function ConfigPanel() {
           </TabsContent>
 
           <TabsContent value="behavior" className="space-y-6 pt-4">
-            <div className="flex items-center justify-between">
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <Label className="text-xs flex items-center gap-2">
+                  <Zap className="w-3 h-3" /> Stamina Ritual Threshold
+                </Label>
+                <span className="text-xs text-accent">{getSetting('stamina_reserve', 5)} Points</span>
+              </div>
+              <Slider 
+                defaultValue={[getSetting('stamina_reserve', 5)]} 
+                max={50} 
+                step={1} 
+                className="py-2" 
+                onValueCommit={(value) => updateSetting('stamina_reserve', value[0])}
+              />
+              <p className="text-[10px] text-muted-foreground italic">Rituals (PvP/PvE) will pause if stamina falls below this level.</p>
+            </div>
+
+            <div className="flex items-center justify-between border-t pt-4">
               <div className="space-y-0.5">
                 <Label>Shadow Stealth</Label>
                 <p className="text-xs text-muted-foreground">Anti-detection delays between rituals.</p>
@@ -248,20 +265,6 @@ export function ConfigPanel() {
               <Switch 
                 checked={getSetting('auto_repair', true)} 
                 onCheckedChange={(checked) => updateSetting('auto_repair', checked)}
-              />
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <Label className="text-xs">Stamina Reserve</Label>
-                <span className="text-xs text-accent">{getSetting('stamina_reserve', 5)} Points</span>
-              </div>
-              <Slider 
-                defaultValue={[getSetting('stamina_reserve', 5)]} 
-                max={20} 
-                step={1} 
-                className="py-2" 
-                onValueCommit={(value) => updateSetting('stamina_reserve', value[0])}
               />
             </div>
           </TabsContent>
