@@ -20,6 +20,7 @@ export type MoonIdSyncInput = z.infer<typeof MoonIdSyncInputSchema>;
 
 const MoonIdSyncOutputSchema = z.object({
   race: z.enum(['Vampire', 'Werewolf']),
+  pvpCooldown: z.number().default(0),
   logs: z.array(z.object({
     type: z.enum(['INFO', 'BATTLE', 'TRAINING', 'LOOT', 'ERROR', 'MANHUNT', 'MISSION', 'DEBUG']),
     message: z.string(),
@@ -55,7 +56,6 @@ const moonIdSyncFlow = ai.defineFlow(
     outputSchema: MoonIdSyncOutputSchema,
   },
   async (input) => {
-    // Perform sync and automation execution
     const gameData = await fetchMonstersGameData(
       input.username, 
       input.password || '', 
@@ -65,7 +65,7 @@ const moonIdSyncFlow = ai.defineFlow(
     );
     
     if (!gameData) {
-      throw new Error('Failed to penetrate the game realm. Check your credentials in the Vault.');
+      throw new Error('Ritual Failed: The realm remained closed. Check your MoonID credentials.');
     }
 
     return gameData;

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Power, Play, Square, Activity, ShieldAlert, Swords, Loader2, Bug, BugOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,9 @@ export function StatusHeader() {
   const [uptime, setUptime] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  
+  const lastSyncRef = useRef<number>(0);
 
   const credentialRef = useMemoFirebase(() => {
     if (!db || !user) return null;
@@ -39,8 +42,16 @@ export function StatusHeader() {
     if (isRunning) {
       interval = setInterval(() => {
         setUptime(prev => prev + 1);
-        // Periodic sync and action cycle every 60 seconds
-        if (uptime % 60 === 0) {
+        
+        const now = Date.now();
+        const secondsSinceLastSync = (now - lastSyncRef.current) / 1000;
+        
+        // Decide whether to trigger sync based on state
+        // If in cooldown, sync every 60s
+        // If not in cooldown, we might sync slightly more often to be reactive (e.g. every 30s)
+        const syncInterval = cooldown > 0 ? 60 : 30;
+        
+        if (secondsSinceLastSync >= syncInterval && !isSyncing) {
           triggerSync();
         }
       }, 1000);
@@ -48,14 +59,14 @@ export function StatusHeader() {
       setUptime(0);
     }
     return () => clearInterval(interval);
-  }, [isRunning, uptime]);
+  }, [isRunning, cooldown, isSyncing]);
 
   const triggerSync = async () => {
-    if (!user || !db || !credentials || !userDocRef) return;
+    if (!user || !db || !credentials || !userDocRef || isSyncing) return;
     
     setIsSyncing(true);
+    lastSyncRef.current = Date.now();
     
-    // Map Firestore settings to a plain object for the backend
     const config: Record<string, any> = {};
     settings?.forEach(s => {
       try {
@@ -74,7 +85,8 @@ export function StatusHeader() {
         settings: config
       });
 
-      // Update character stats in Firestore
+      setCooldown(result.pvpCooldown);
+
       const updateData: any = {
         id: user.uid,
         race: result.race,
@@ -89,14 +101,8 @@ export function StatusHeader() {
         lastSync: serverTimestamp(),
       };
 
-      // Track last PvP action for the 15m rule UI
-      if (result.logs.some(l => l.type === 'BATTLE')) {
-        updateData.lastPvpAction = serverTimestamp();
-      }
-
       setDocumentNonBlocking(userDocRef, updateData, { merge: true });
 
-      // Save activity logs to the "Chronicles"
       const logsRef = collection(db, 'users', user.uid, 'activityLogs');
       result.logs.forEach(log => {
         const newLogRef = doc(logsRef);
@@ -108,8 +114,20 @@ export function StatusHeader() {
           logLevel: log.type,
         }, { merge: true });
       });
+
+      // If we performed a ritual action, we might want to sync again SOON
+      // but only if we aren't now in cooldown. If we are in cooldown, we wait the interval.
+      const performedAction = result.logs.some(l => 
+        l.type === 'BATTLE' || l.type === 'MANHUNT' || l.type === 'MISSION'
+      );
+      
+      if (performedAction && result.pvpCooldown === 0) {
+        // Trigger another sync quickly to check next action
+        setTimeout(() => triggerSync(), 5000);
+      }
+
     } catch (error) {
-      // Global error listener catches these
+      // Handled by FirebaseErrorListener
     } finally {
       setIsSyncing(false);
     }
@@ -149,7 +167,13 @@ export function StatusHeader() {
           {isSyncing && (
             <div className="flex items-center gap-2 text-accent">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Shadowing Realm...</span>
+              <span>Invoking Ritual...</span>
+            </div>
+          )}
+          {cooldown > 0 && (
+            <div className="flex items-center gap-2 text-orange-400">
+              <Activity className="w-4 h-4 animate-pulse" />
+              <span>Cooldown: {formatTime(cooldown)}</span>
             </div>
           )}
           <Button
@@ -162,12 +186,8 @@ export function StatusHeader() {
             )}
           >
             {debugMode ? <Bug className="w-3 h-3" /> : <BugOff className="w-3 h-3" />}
-            Debug: {debugMode ? 'ON' : 'OFF'}
+            Shadow: {debugMode ? 'VERBOSE' : 'SILENT'}
           </Button>
-          <div className="flex items-center gap-2">
-            <Swords className="w-4 h-4 text-accent" />
-            <span className="text-muted-foreground">Ritual Sync</span>
-          </div>
         </div>
         
         <Button 
@@ -180,9 +200,9 @@ export function StatusHeader() {
           )}
         >
           {isRunning ? (
-            <><Square className="w-4 h-4 fill-current" /> Stop Automata</>
+            <><Square className="w-4 h-4 fill-current" /> Stop Ritual</>
           ) : (
-            <><Play className="w-4 h-4 fill-current" /> Start Automata</>
+            <><Play className="w-4 h-4 fill-current" /> Start Ritual</>
           )}
         </Button>
       </div>
