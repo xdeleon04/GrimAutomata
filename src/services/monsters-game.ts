@@ -136,18 +136,26 @@ export async function fetchMonstersGameData(
     const secondsMatchStatus = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
     pvpCooldown = secondsMatchStatus ? parseInt(secondsMatchStatus[1]) : 0;
 
-    const isWorking = html.includes("trabajando") || html.includes("trabajas") || html.includes("cementerio");
-    const isInMission = html.includes("misión") || html.includes("Gruta Ancestral");
+    const isWorking = html.toLowerCase().includes("trabajando") || html.toLowerCase().includes("cementerio");
+    const isInMission = html.toLowerCase().includes("misión") || html.toLowerCase().includes("gruta ancestral");
     const isBusy = isWorking || isInMission;
 
-    if (isBusy) {
-      logDebug(`[SYNC] Ritual already active: ${isWorking ? 'WORKING' : 'ON_MISSION'}. Cooldown: ${pvpCooldown}s`);
-      const timeLeft = pvpCooldown > 0 ? `${Math.floor(pvpCooldown / 60)}m ${pvpCooldown % 60}s` : "unknown time";
+    if (pvpCooldown > 0) {
+      const timeLeft = `${Math.floor(pvpCooldown / 60)}m ${pvpCooldown % 60}s`;
+      let busyMsg = `Shadow Vigil: Character is currently resting. PvP Cooldown: ${timeLeft}.`;
+      
+      if (isWorking) {
+        busyMsg = `Shadow Vigil: Character is currently working at the graveyard. Shift ends in ${timeLeft}.`;
+      } else if (isInMission) {
+        busyMsg = `Shadow Vigil: Character is currently on a mission in the Ancestral Grotto. Ends in ${timeLeft}.`;
+      }
+
       logs.push({ 
         type: 'INFO', 
-        message: `Shadow Vigil: Character is already engaged (${isWorking ? 'working at the graveyard' : 'on a mission'}). Resuming watch for ${timeLeft}.`, 
+        message: busyMsg, 
         timestamp: new Date().toISOString() 
       });
+      logDebug(`[SYNC] Initial Busy State detected: ${isWorking ? 'WORKING' : isInMission ? 'MISSION' : 'PVP_COOLDOWN'}. Time left: ${pvpCooldown}s`);
     }
 
     // --- STEP 2: AUTOMATION RITUALS ---
@@ -182,7 +190,13 @@ export async function fetchMonstersGameData(
 
           logs.push({ 
             type: 'INFO', 
-            message: `Shadow Ritual: Energy low (${stamina}). Graveyard work triggered for ${hoursToWork}h. Resting for ${Math.floor(pvpCooldown / 3600)}h.`, 
+            message: `Shadow Ritual: Energy low (${stamina}). Graveyard work started for ${hoursToWork}h to restore power.`, 
+            timestamp: new Date().toISOString() 
+          });
+        } else {
+           logs.push({ 
+            type: 'INFO', 
+            message: `Shadow Ritual: Energy below threshold (${stamina}/${staminaReserve}). Automations paused to conserve power.`, 
             timestamp: new Date().toISOString() 
           });
         }
@@ -251,13 +265,14 @@ export async function fetchMonstersGameData(
                     
                     logs.push({ 
                       type: 'BATTLE', 
-                      message: `Shadow Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs [${opponentName}]. Loot: ${loot} gold, +${exp} XP. PvP Rest: ${Math.floor(pvpCooldown / 60)}m triggered.`, 
+                      message: `Shadow Ritual: PvP ${isWinner ? 'VICTORY' : 'DEFEAT'} vs [${opponentName}]. Loot: ${loot} gold, +${exp} XP. Cooldown: ${Math.floor(pvpCooldown / 60)}m.`, 
                       timestamp: new Date().toISOString() 
                     });
                   }
                 }
               } else if (searchHtml.includes("in vain") || searchHtml.includes("en vano")) {
-                logs.push({ type: 'INFO', message: `Shadow Ritual: District scan found no rivals. Waiting 5m for next sweep.`, timestamp: new Date().toISOString() });
+                logs.push({ type: 'INFO', message: `Shadow Ritual: No rivals found in the district. Standing by for 15m.`, timestamp: new Date().toISOString() });
+                pvpCooldown = 900;
               }
             }
           } else if (settings.auto_manhunt) {
@@ -277,7 +292,7 @@ export async function fetchMonstersGameData(
         }
 
         // Grotto Fallback
-        if (settings.auto_grotto && !logs.some(l => l.type === 'MANHUNT' || l.type === 'BATTLE')) {
+        if (settings.auto_grotto && pvpCooldown === 0 && !logs.some(l => l.type === 'MANHUNT' || l.type === 'BATTLE')) {
           const grottoUrl = `https://${server}/index.php?ac=ahnenstaette`;
           const gCheck = await fetch(grottoUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
           const gHtml = await gCheck.text();
@@ -286,11 +301,15 @@ export async function fetchMonstersGameData(
             const diffMap = { 'easy': '0', 'medium': '1', 'hard': '2' };
             const diffVal = (diffMap as any)[settings.mission_difficulty || 'medium'] || '1';
             const gPayload = new URLSearchParams({ 'mision': 'true', 'schwierigkeit': diffVal, 'go': 'Aceptar' });
-            await fetch(grottoUrl, {
+            const gRes = await fetch(grottoUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
               body: gPayload
             });
+            const gResHtml = await gRes.text();
+            const gSecondsMatch = gResHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
+            pvpCooldown = gSecondsMatch ? parseInt(gSecondsMatch[1]) : 600;
+
             logs.push({ type: 'MISSION', message: `Shadow Ritual: Entering Ancestral Grotto (${settings.mission_difficulty || 'medium'}). Rest period started.`, timestamp: new Date().toISOString() });
           }
         }
