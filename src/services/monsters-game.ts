@@ -146,9 +146,7 @@ export async function fetchMonstersGameData(
       // Detect Human Hunt Limits
       const humanHuntExhausted = huntHtml.includes("already used all of today's hunting time") || huntHtml.includes("ya has usado todo tu tiempo de caza");
       
-      // Detect PvP 15m Cooldown
-      const pvpCooldownMsg = huntHtml.match(/You can only fight every 15 minutes/i) 
-                            || huntHtml.match(/Puedes volver a atacar en/i);
+      // Detect PvP 15m Cooldown via the COUNTER div
       const counterMatch = huntHtml.match(/id=["']COUNTER["'][^>]*>([\d:]+)</i);
 
       if (counterMatch) {
@@ -188,7 +186,7 @@ export async function fetchMonstersGameData(
           if (huntResultHtml.includes("successful") || huntResultHtml.includes("Exitoso")) {
             const gegnerIdMatch = huntResultHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
             const opponentNameMatch = huntResultHtml.match(/tracked down the (?:Hombre Lobo|Vampiro|Adversario)\s+([^ ]+)\s+and/i);
-            const opponentName = opponentNameMatch ? opponentNameMatch[1] : (targetName || "Unknown Rival");
+            const opponentName = opponentNameMatch ? opponentNameMatch[1].trim() : (targetName || "Unknown Rival");
 
             if (gegnerIdMatch) {
               logDebug(`[AUTOMATA] Target [${opponentName}] found! GegnerID: ${gegnerIdMatch[1]}. Launching asalto...`);
@@ -235,7 +233,7 @@ export async function fetchMonstersGameData(
             logDebug(`[AUTOMATA] Search in vain.`);
             logs.push({ 
               type: 'INFO', 
-              message: `Shadow Ritual: Scanned for ${targetName ? targetName : 'rivals'} in vain. The area is quiet.`, 
+              message: `Shadow Ritual: Scanned for ${targetName ? `[${targetName}]` : 'rivals'} in vain. The area is quiet.`, 
               timestamp: new Date().toISOString() 
             });
           }
