@@ -51,94 +51,111 @@ export async function fetchMonstersGameData(
   };
 
   try {
-    const cookies: string[] = [];
-    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
+    const cookies: Map<string, string> = new Map();
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
-    logDebug(`[DEBUG] Initiating MoonID Auth for: ${username}`);
+    const getCookieString = () => Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
+    const updateCookies = (setCookieHeaders: string[] | null) => {
+      if (!setCookieHeaders) return;
+      setCookieHeaders.forEach(header => {
+        const part = header.split(';')[0];
+        const [key, ...valParts] = part.split('=');
+        if (key) cookies.set(key.trim(), valParts.join('='));
+      });
+    };
+
+    logDebug(`[DEBUG] Step 1: Visiting MoonID Login Page for Session/CSRF`);
     
-    // 1. Authenticate with MoonID
-    // Enhanced headers to mimic a real browser login and avoid 403 errors
-    const loginResponse = await fetch('https://moonid.net/api/account/connect/83/', {
+    // 1a. Get initial session cookies and CSRF token
+    const preAuthResponse = await fetch('https://moonid.net/account/login/', {
+      headers: { 'User-Agent': userAgent }
+    });
+    updateCookies(preAuthResponse.headers.getSetCookie());
+    const preAuthHtml = await preAuthResponse.text();
+    
+    // Extract CSRF token if present (common in Django apps like MoonID)
+    const csrfMatch = preAuthHtml.match(/name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i);
+    const csrfToken = csrfMatch ? csrfMatch[1] : '';
+    logDebug(`[DEBUG] CSRF Token found: ${csrfToken ? 'YES' : 'NO'}`);
+
+    logDebug(`[DEBUG] Step 2: Authenticating with MoonID`);
+    
+    // 1b. Perform Login
+    const loginPayload = new URLSearchParams({
+      username: username,
+      password: password,
+      csrfmiddlewaretoken: csrfToken,
+      next: '/api/account/connect/83/'
+    });
+
+    const loginResponse = await fetch('https://moonid.net/account/login/', {
       method: 'POST',
       headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
         'Cache-Control': 'max-age=0',
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': getCookieString(),
         'Origin': 'https://moonid.net',
         'Referer': 'https://moonid.net/account/login/',
-        'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
         'User-Agent': userAgent,
       },
-      body: new URLSearchParams({
-        username: username,
-        password: password,
-      }),
+      body: loginPayload,
       redirect: 'manual'
     });
 
-    logDebug(`[DEBUG] MoonID Response Status: ${loginResponse.status}`);
-    
+    logDebug(`[DEBUG] MoonID Auth Status: ${loginResponse.status}`);
+    updateCookies(loginResponse.headers.getSetCookie());
+
     if (loginResponse.status === 403) {
       logDebug(`[DEBUG] CRITICAL: MoonID Sanctuary denied entry (403). Possible bot protection or rate limiting.`);
       throw new Error("Forbidden: MoonID sanctuary denied access. Ensure credentials are valid and try again later.");
     }
 
-    const setCookies = loginResponse.headers.getSetCookie();
-    cookies.push(...setCookies.map(c => c.split(';')[0]));
-    logDebug(`[DEBUG] Collected ${cookies.length} cookies from MoonID`);
-
     // 2. Connect to the specific game server status page
     const realmUrl = `https://${server}/index.php?ac=status`;
-    logDebug(`[DEBUG] Fetching Realm Status: ${realmUrl}`);
+    logDebug(`[DEBUG] Step 3: Penetrating Realm Status: ${realmUrl}`);
     
     const statusResponse = await fetch(realmUrl, {
       headers: {
-        'Cookie': cookies.join('; '),
+        'Cookie': getCookieString(),
         'User-Agent': userAgent,
+        'Referer': 'https://moonid.net/'
       }
     });
 
     const html = await statusResponse.text();
-    logDebug(`[DEBUG] HTML Length: ${html.length} chars`);
+    logDebug(`[DEBUG] Sanctuary HTML Length: ${html.length} chars`);
 
-    // 3. Extract Stats using Regex targeting the Spanish UI provided by user
+    if (html.includes('login') && html.length < 5000) {
+      logDebug(`[DEBUG] WARNING: Redirected to login. Session might not have bound correctly.`);
+    }
+
+    // 3. Extract Stats using Regex targeting the Spanish UI
     const extract = (regex: RegExp, content: string) => {
       const match = content.match(regex);
       return match ? match[1] : null;
     };
 
-    // Extracting from Statbar (reliable summary provided in user snippet)
+    // Extracting from Statbar (Reliable summary)
     const rawGold = extract(/id="goldbalance">([\d,.]+)<\/span>/i, html);
     const gold = parseMGNumber(rawGold);
-    logDebug(`[DEBUG] Parsed Gold: ${gold} (Raw: ${rawGold})`);
     
-    // Experiencia: 1411 / 1445 (from statbar snippet)
-    const expMatch = html.match(/Experiencia:\s*(\d+)\s*\/\s*(\d+)/i);
-    const experience = expMatch ? parseInt(expMatch[1]) : 0;
-    const nextLevelExp = expMatch ? parseInt(expMatch[2]) : 0;
-    logDebug(`[DEBUG] Exp: ${experience}/${nextLevelExp}`);
+    // Experiencia: 1411 / 1445
+    const expMatch = html.match(/Experiencia:\s*([\d.]+)\s*\/\s*([\d.]+)/i);
+    const experience = expMatch ? parseInt(expMatch[1].replace(/\./g, '')) : 0;
+    const nextLevelExp = expMatch ? parseInt(expMatch[2].replace(/\./g, '')) : 0;
 
-    // Nivel 17 (from skills table snippet)
+    // Nivel 17
     const levelMatch = html.match(/char_level">Nivel\s*(\d+)<\/span>/i);
     const level = levelMatch ? parseInt(levelMatch[1]) : 0;
-    logDebug(`[DEBUG] Level: ${level}`);
 
-    // Attributes from the provided skills table HTML structure
-    // Fuerza: ... (55)
-    const str = parseInt(extract(/Fuerza:.*?\((\d+)\)/si, html) || '10');
-    const def = parseInt(extract(/Defensa:.*?\((\d+)\)/si, html) || '10');
-    const agi = parseInt(extract(/Agilidad:.*?\((\d+)\)/si, html) || '10');
-    const con = parseInt(extract(/Resistencia:.*?\((\d+)\)/si, html) || '10');
-    const dex = parseInt(extract(/Destreza:.*?\((\d+)\)/si, html) || '10');
-    logDebug(`[DEBUG] Stats -> STR: ${str}, DEF: ${def}, AGI: ${agi}, CON: ${con}, DEX: ${dex}`);
+    // Attributes from Spanish skills table
+    const str = parseInt(extract(/Fuerza:.*?\((\d+)\)/si, html) || '0');
+    const def = parseInt(extract(/Defensa:.*?\((\d+)\)/si, html) || '0');
+    const agi = parseInt(extract(/Agilidad:.*?\((\d+)\)/si, html) || '0');
+    const con = parseInt(extract(/Resistencia:.*?\((\d+)\)/si, html) || '0');
+    const dex = parseInt(extract(/Destreza:.*?\((\d+)\)/si, html) || '0');
 
     // Energía vital: (780|780)
     const rawStamina = extract(/Energía vital:.*?\((\d+)\|/si, html);
@@ -146,12 +163,9 @@ export async function fetchMonstersGameData(
 
     // Determine Race
     const race: 'Vampire' | 'Werewolf' = html.toLowerCase().includes('vampiro') ? 'Vampire' : 'Werewolf';
-    logDebug(`[DEBUG] Detected Race: ${race}`);
+    logDebug(`[DEBUG] Final Stats -> Level: ${level}, Gold: ${gold}, Race: ${race}`);
 
-    // 4. Activity Logs
     const logs: MonstersGameStats['logs'] = [];
-    
-    // Add debug logs if enabled
     debugLogs.forEach(msg => {
       logs.push({
         type: 'DEBUG',
@@ -201,7 +215,7 @@ export async function fetchMonstersGameData(
       stats: { level: 0, gold: 0, stamina: 0, experience: 0, nextLevelExp: 0, attributes: { strength: 0, defense: 0, dexterity: 0, agility: 0, constitution: 0 } },
       logs: [{
         type: 'ERROR',
-        message: `Failed to penetrate realm: ${error.message}`,
+        message: `Ritual failed: ${error.message}`,
         timestamp: new Date().toISOString()
       }]
     };
