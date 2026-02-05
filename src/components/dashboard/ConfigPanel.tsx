@@ -8,7 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target, Search, Zap } from 'lucide-react';
+import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target, Search, Zap, Hammer } from 'lucide-react';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { collection, doc } from 'firebase/firestore';
@@ -38,7 +38,6 @@ export function ConfigPanel() {
     if (!setting) return defaultValue;
     try {
       const val = JSON.parse(setting.settingValue);
-      // Ensure we don't return an empty string for Select components to avoid Radix UI runtime errors
       if (val === "" && typeof defaultValue === 'string' && defaultValue !== "") {
         return defaultValue;
       }
@@ -154,7 +153,7 @@ export function ConfigPanel() {
                   <Target className="w-3 h-3" /> Specific Target Name
                 </Label>
                 <Input 
-                  placeholder="Enter Werewolf Name"
+                  placeholder="Enter Rival Name"
                   value={getSetting('pvp_target_name', '')}
                   onChange={(e) => updateSetting('pvp_target_name', e.target.value)}
                   className="h-8 bg-background/50 text-xs"
@@ -246,13 +245,24 @@ export function ConfigPanel() {
                 <span className="text-xs text-accent">{getSetting('stamina_reserve', 5)} Points</span>
               </div>
               <Slider 
-                defaultValue={[getSetting('stamina_reserve', 5)]} 
+                value={[getSetting('stamina_reserve', 5)]} 
                 max={maxStamina} 
                 step={1} 
                 className="py-2" 
-                onValueCommit={(value) => updateSetting('stamina_reserve', value[0])}
+                onValueChange={(value) => updateSetting('stamina_reserve', value[0])}
               />
-              <p className="text-[10px] text-muted-foreground italic">Rituals (PvP/PvE) will pause if stamina falls below this level. Max value is bound to your current character's stamina capacity.</p>
+              <p className="text-[10px] text-muted-foreground italic">Rituals will pause if stamina falls below this level.</p>
+            </div>
+
+            <div className="flex items-center justify-between border-t pt-4">
+              <div className="space-y-0.5">
+                <Label className="flex items-center gap-2"><Hammer className="w-3 h-3" /> Auto-Work at Graveyard</Label>
+                <p className="text-xs text-muted-foreground">Automatically work to restore stamina when below threshold.</p>
+              </div>
+              <Switch 
+                checked={getSetting('auto_work', true)} 
+                onCheckedChange={(checked) => updateSetting('auto_work', checked)}
+              />
             </div>
 
             <div className="flex items-center justify-between border-t pt-4">
