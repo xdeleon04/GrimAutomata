@@ -1,3 +1,4 @@
+
 "use client"
 
 import React from 'react';
@@ -31,7 +32,6 @@ export function ConfigPanel() {
   const { data: userData, isLoading: isUserDocLoading } = useDoc(userDocRef);
 
   const isLoading = isSettingsLoading || isUserDocLoading;
-  const maxStamina = userData?.maxStamina || 1000;
 
   const getSetting = (name: string, defaultValue: any) => {
     const setting = settings?.find(s => s.settingName === name);
@@ -242,16 +242,16 @@ export function ConfigPanel() {
                 <Label className="text-xs flex items-center gap-2">
                   <Zap className="w-3 h-3" /> Stamina Ritual Threshold
                 </Label>
-                <span className="text-xs text-accent">{getSetting('stamina_reserve', 5)} Points</span>
+                <span className="text-xs text-accent">{getSetting('stamina_reserve', 10)}%</span>
               </div>
               <Slider 
-                value={[getSetting('stamina_reserve', 5)]} 
-                max={maxStamina} 
+                value={[getSetting('stamina_reserve', 10)]} 
+                max={100} 
                 step={1} 
                 className="py-2" 
                 onValueChange={(value) => updateSetting('stamina_reserve', value[0])}
               />
-              <p className="text-[10px] text-muted-foreground italic">Rituals will pause if stamina falls below this level.</p>
+              <p className="text-[10px] text-muted-foreground italic">Rituals will pause if stamina falls below this percentage.</p>
             </div>
 
             <div className="flex items-center justify-between border-t pt-4">

@@ -129,7 +129,11 @@ export async function fetchMonstersGameData(
                        || html.match(/Energía\s+vital:\s*([\d,.]+)/i);
     const stamina = parseMGNumber(staminaMatch ? staminaMatch[1] : "0");
     const maxStamina = parseMGNumber(staminaMatch && staminaMatch[2] ? staminaMatch[2] : "780");
-    const staminaReserve = parseInt(settings.stamina_reserve || '5');
+    
+    // stamina_reserve is now a percentage (0-100)
+    const staminaReservePercent = parseInt(settings.stamina_reserve || '10');
+    const thresholdValue = (staminaReservePercent / 100) * maxStamina;
+    
     const race = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
 
     // Check for global busy state or active cooldowns
@@ -153,7 +157,7 @@ export async function fetchMonstersGameData(
                          
     const isBusy = isWorking || isInMission || isManhunting;
 
-    if (pvpCooldown > 0) {
+    if (isBusy || pvpCooldown > 0) {
       const timeLeft = `${Math.floor(pvpCooldown / 60)}m ${pvpCooldown % 60}s`;
       let busyMsg = `Shadow Vigil: Character is currently resting. PvP Cooldown: ${timeLeft}.`;
       
@@ -175,12 +179,14 @@ export async function fetchMonstersGameData(
 
     // --- STEP 2: AUTOMATION RITUALS ---
     if (!isBusy && pvpCooldown === 0) {
-      if (stamina <= staminaReserve) {
+      if (stamina <= thresholdValue) {
         if (settings.auto_work !== false) {
-          const hoursToWork = Math.min(12, Math.max(1, Math.ceil((maxStamina - stamina) / 20)));
-          const workUrl = `https://${server}/index.php?ac=friedhof`;
+          // Calculate hours to get back to threshold + 10% buffer
+          const pointsNeeded = thresholdValue - stamina + (maxStamina * 0.1);
+          const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 20))); // MG base graveyard is roughly 20/hr
           
-          logDebug(`[AUTOMATA] Energy critical (${stamina}/${maxStamina}). Initiating graveyard work for ${hoursToWork}h.`);
+          const workUrl = `https://${server}/index.php?ac=friedhof`;
+          logDebug(`[AUTOMATA] Energy below threshold (${stamina}/${thresholdValue.toFixed(0)}). Initiating graveyard shift for ${hoursToWork}h.`);
           
           const workPayload = new URLSearchParams({
             ac: 'friedhof',
@@ -205,13 +211,13 @@ export async function fetchMonstersGameData(
 
           logs.push({ 
             type: 'INFO', 
-            message: `Shadow Ritual: Energy low (${stamina}). Graveyard work started for ${hoursToWork}h to restore power.`, 
+            message: `Shadow Ritual: Energy low (${stamina.toFixed(0)}). Graveyard shift started for ${hoursToWork}h to restore power.`, 
             timestamp: new Date().toISOString() 
           });
         } else {
            logs.push({ 
             type: 'INFO', 
-            message: `Shadow Ritual: Energy below threshold (${stamina}/${staminaReserve}). Automations paused to conserve power.`, 
+            message: `Shadow Ritual: Energy below threshold (${stamina.toFixed(0)}/${staminaReservePercent}%). Automations paused.`, 
             timestamp: new Date().toISOString() 
           });
         }
