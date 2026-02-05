@@ -77,11 +77,10 @@ export function ActivityLog() {
 
   if (!user) return null;
 
-  // We reverse the logs for display so newest are at the bottom for a terminal feel
   const displayLogs = logs ? [...logs].reverse() : [];
 
   return (
-    <div className="flex flex-col h-[500px] xl:h-full min-h-[400px] bg-card rounded-lg gothic-border overflow-hidden">
+    <div className="flex flex-col h-[500px] xl:h-[600px] bg-card rounded-lg gothic-border overflow-hidden shadow-2xl">
       <div className="p-4 border-b flex items-center justify-between bg-muted/50">
         <h2 className="text-sm font-bold uppercase tracking-widest text-accent flex items-center gap-2">
           <Terminal className="w-4 h-4" /> Ritual Chronicles
@@ -94,7 +93,7 @@ export function ActivityLog() {
         </div>
       </div>
       
-      <ScrollArea ref={scrollRef} className="flex-1 p-4 font-mono text-[13px] leading-relaxed log-scroll">
+      <ScrollArea ref={scrollRef} className="flex-1 p-4 font-mono text-[13px] leading-relaxed log-scroll bg-black/20">
         <div className="space-y-3 pb-4">
           {displayLogs.map((log) => (
             <div key={log.id} className="group flex gap-3 animate-in fade-in slide-in-from-left-2 duration-300">
