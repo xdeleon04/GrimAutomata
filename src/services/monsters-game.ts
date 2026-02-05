@@ -1,4 +1,4 @@
-
+'use server';
 /**
  * @fileOverview Service for interacting with MonstersGame via MoonID.
  * Handles authentication, cookie persistence, and active ritual execution (automations).
@@ -34,6 +34,7 @@ export interface MonstersGameStats {
  */
 function parseMGNumber(str: string | null): number {
   if (!str) return 0;
+  // MonstersGame uses . for thousands and , for decimals in ES realm
   const normalized = str.trim()
     .replace(/\s/g, '')
     .replace(/\./g, '')
@@ -81,7 +82,6 @@ export async function fetchMonstersGameData(
     const preAuthHtml = await preAuthResponse.text();
     const csrfMatch = preAuthHtml.match(/name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i);
     const csrfToken = csrfMatch ? csrfMatch[1] : '';
-    logDebug(`[AUTH] CSRF detected: ${csrfToken ? 'OK' : 'MISSING'}`);
 
     const loginPayload = new URLSearchParams({
       csrfmiddlewaretoken: csrfToken,
@@ -103,12 +103,10 @@ export async function fetchMonstersGameData(
       redirect: 'manual'
     });
     updateCookies(loginResponse.headers.getSetCookie());
-    logDebug(`[AUTH] Response Status: ${loginResponse.status}`);
 
     let currentUrl = loginResponse.headers.get('Location');
     while (currentUrl) {
       if (currentUrl.startsWith('/')) currentUrl = 'https://moonid.net' + currentUrl;
-      logDebug(`[AUTH] Redirecting to: ${currentUrl}`);
       const res = await fetch(currentUrl, {
         headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent },
         redirect: 'manual'
@@ -141,28 +139,44 @@ export async function fetchMonstersGameData(
       const huntPageRes = await fetch(huntPageUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
       const huntHtml = await huntPageRes.text();
 
-      // Broad Cooldown Detection: Look for id="COUNTER" or the 15m message
-      const counterMatch = huntHtml.match(/id\s*=\s*["']COUNTER["'][^>]*>\s*([\d:]+)\s*</i);
-      logDebug(`[AUTOMATA] Cooldown Scan: ${counterMatch ? counterMatch[1] : 'NOT_FOUND'}`);
+      // --- ADVANCED COOLDOWN DETECTION ---
+      // The COUNTER div is often empty in raw HTML because it's populated via JS.
+      // We must parse the JS variables directly.
+      const secondsMatch = huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
+      const secondsRemaining = secondsMatch ? parseInt(secondsMatch[1]) : 0;
+      
+      const tagContentMatch = huntHtml.match(/id\s*=\s*["']COUNTER["'][^>]*>\s*([\d:]+)\s*</i);
+      
+      let cooldownDisplay = 'NONE';
+      if (secondsRemaining > 0) {
+        const h = Math.floor(secondsRemaining / 3600);
+        const m = Math.floor((secondsRemaining % 3600) / 60);
+        const s = secondsRemaining % 60;
+        cooldownDisplay = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      } else if (tagContentMatch && tagContentMatch[1]) {
+        cooldownDisplay = tagContentMatch[1];
+      }
 
-      if (counterMatch || huntHtml.includes("every 15 minutes") || huntHtml.includes("cada 15 minutos")) {
-        const cooldownRemaining = counterMatch ? counterMatch[1] : 'ACTIVE';
+      logDebug(`[AUTOMATA] Cooldown check result: ${cooldownDisplay}`);
+
+      const hasCooldownText = huntHtml.includes("every 15 minutes") || huntHtml.includes("cada 15 minutos");
+
+      if (cooldownDisplay !== 'NONE' || hasCooldownText) {
+        const timerMsg = cooldownDisplay !== 'NONE' ? ` (${cooldownDisplay})` : '';
         logs.push({ 
           type: 'INFO', 
-          message: `Shadow Ritual: Resting in shadows. PvP cooldown ${cooldownRemaining !== 'ACTIVE' ? `(${cooldownRemaining})` : 'is active'}.`, 
+          message: `Shadow Ritual: Resting in shadows. PvP cooldown active${timerMsg}.`, 
           timestamp: new Date().toISOString() 
         });
         logDebug(`[AUTOMATA] PvP blocked by cooldown.`);
       } else {
         const humanLimitReached = huntHtml.includes("used all of today's hunting time") || huntHtml.includes("ya has usado todo tu tiempo de caza");
-        logDebug(`[AUTOMATA] Daily Human Hunt Limit: ${humanLimitReached ? 'REACHED' : 'AVAILABLE'}`);
         
         if (humanLimitReached) {
+          logDebug(`[AUTOMATA] Manhunt limit reached. Attempting PvP...`);
           if (settings.pvp_attack) {
             const targetName = settings.pvp_target_name;
             const strategy = settings.pvp_search_strategy === 'none' ? '' : (settings.pvp_search_strategy || '');
-            
-            logDebug(`[AUTOMATA] PvP Tracking: Target=[${targetName || 'RANDOM'}] | Strategy=[${strategy || 'NORMAL'}]`);
             
             const pvpSearchPayload = new URLSearchParams({
               ac: 'raubzug',
@@ -171,6 +185,7 @@ export async function fetchMonstersGameData(
               searchopt: strategy,
             });
 
+            logDebug(`[AUTOMATA] Searching district for [${targetName || 'random rivals'}]...`);
             const pvpSearchRes = await fetch(huntPageUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
@@ -186,8 +201,8 @@ export async function fetchMonstersGameData(
               const opponentName = opponentNameMatch ? opponentNameMatch[1].trim() : (targetName || "Unknown Rival");
 
               if (gegnerIdMatch) {
-                logDebug(`[AUTOMATA] Rival [${opponentName}] located. Executing Asalto...`);
-                logs.push({ type: 'INFO', message: `Shadow Ritual: Rival [${opponentName}] tracked! Initiating combat...`, timestamp: new Date().toISOString() });
+                logDebug(`[AUTOMATA] Opponent found: ${opponentName}. Executing Asalto...`);
+                logs.push({ type: 'INFO', message: `Shadow Ritual: Opponent [${opponentName}] located! Initiating combat...`, timestamp: new Date().toISOString() });
                 
                 const attackPayload = new URLSearchParams({ ac: 'raubzug', sac: 'attack', gegnerid: gegnerIdMatch[1] });
                 const battleRes = await fetch(huntPageUrl, {
@@ -216,13 +231,13 @@ export async function fetchMonstersGameData(
                 }
               }
             } else if (searchHtml.includes("in vain") || searchHtml.includes("en vano")) {
-              logDebug(`[AUTOMATA] Search result: IN_VAIN.`);
-              logs.push({ type: 'INFO', message: `Shadow Ritual: Scanned district for [${targetName || 'Werewolves'}] in vain.`, timestamp: new Date().toISOString() });
+              logDebug(`[AUTOMATA] PvP search failed: IN_VAIN.`);
+              logs.push({ type: 'INFO', message: `Shadow Ritual: Scanned the district for rivals in vain.`, timestamp: new Date().toISOString() });
             }
           }
         } else if (settings.auto_manhunt) {
           const duration = settings.manhunt_duration || '60';
-          logDebug(`[AUTOMATA] Initiating Manhunt: ${duration}m`);
+          logDebug(`[AUTOMATA] Initiating Manhunt for ${duration}m...`);
           const mPayload = new URLSearchParams({ ac: 'raubzug', sac: 'vampir', duration: duration, search: 'Empezar la búsqueda' });
           await fetch(huntPageUrl, {
             method: 'POST',
@@ -233,7 +248,7 @@ export async function fetchMonstersGameData(
         }
       }
 
-      // Grotto Fallback if PvP/Manhunt didn't occur
+      // Grotto Fallback
       if (settings.auto_grotto && !logs.some(l => l.type === 'MANHUNT' || l.type === 'BATTLE')) {
         const grottoUrl = `https://${server}/index.php?ac=ahnenstaette`;
         const gCheck = await fetch(grottoUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });

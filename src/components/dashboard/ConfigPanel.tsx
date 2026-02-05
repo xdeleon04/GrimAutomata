@@ -1,4 +1,3 @@
-
 "use client"
 
 import React from 'react';
@@ -29,9 +28,14 @@ export function ConfigPanel() {
     const setting = settings?.find(s => s.settingName === name);
     if (!setting) return defaultValue;
     try {
-      return JSON.parse(setting.settingValue);
+      const val = JSON.parse(setting.settingValue);
+      // Ensure we don't return an empty string for Select components
+      if (val === "" && typeof defaultValue === 'string' && defaultValue !== "") {
+        return defaultValue;
+      }
+      return val;
     } catch {
-      return setting.settingValue;
+      return setting.settingValue || defaultValue;
     }
   };
 
