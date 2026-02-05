@@ -175,7 +175,7 @@ export async function fetchMonstersGameData(
 
           logs.push({ 
             type: 'INFO', 
-            message: `Shadow Ritual: Energy low (${stamina}). Started graveyard work for ${hoursToWork} hours.`, 
+            message: `Shadow Ritual: Energy low (${stamina}). Graveyard work triggered a ${Math.floor(pvpCooldown / 3600)}h restoration shift.`, 
             timestamp: new Date().toISOString() 
           });
         }
@@ -246,13 +246,13 @@ export async function fetchMonstersGameData(
                     
                     logs.push({ 
                       type: 'BATTLE', 
-                      message: `Shadow Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs [${opponentName}]. Loot: ${loot} gold, +${exp} XP.`, 
+                      message: `Shadow Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs [${opponentName}]. Loot: ${loot} gold, +${exp} XP. PvP Cooldown: ${Math.floor(pvpCooldown / 60)}m triggered.`, 
                       timestamp: new Date().toISOString() 
                     });
                   }
                 }
               } else if (searchHtml.includes("in vain") || searchHtml.includes("en vano")) {
-                logs.push({ type: 'INFO', message: `Shadow Ritual: District scan found no rivals.`, timestamp: new Date().toISOString() });
+                logs.push({ type: 'INFO', message: `Shadow Ritual: District scan found no rivals. Waiting 5m for next sweep.`, timestamp: new Date().toISOString() });
               }
             }
           } else if (settings.auto_manhunt) {
@@ -267,7 +267,7 @@ export async function fetchMonstersGameData(
             const secondsMatchM = mHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
             pvpCooldown = secondsMatchM ? parseInt(secondsMatchM[1]) : parseInt(duration) * 60;
             
-            logs.push({ type: 'MANHUNT', message: `Shadow Ritual: Manhunt started for ${duration} minutes.`, timestamp: new Date().toISOString() });
+            logs.push({ type: 'MANHUNT', message: `Shadow Ritual: Manhunt sweep triggered a ${duration}m cooldown. XP and Gold incoming.`, timestamp: new Date().toISOString() });
           }
         }
 
@@ -286,7 +286,7 @@ export async function fetchMonstersGameData(
               headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
               body: gPayload
             });
-            logs.push({ type: 'MISSION', message: `Shadow Ritual: Entering Ancestral Grotto (${settings.mission_difficulty || 'medium'}).`, timestamp: new Date().toISOString() });
+            logs.push({ type: 'MISSION', message: `Shadow Ritual: Entering Ancestral Grotto (${settings.mission_difficulty || 'medium'}). Mission cooldown started.`, timestamp: new Date().toISOString() });
           }
         }
       }
