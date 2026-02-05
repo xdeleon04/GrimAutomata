@@ -132,13 +132,26 @@ export async function fetchMonstersGameData(
     const staminaReserve = parseInt(settings.stamina_reserve || '5');
     const race = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
 
-    // Check for global busy state or active cooldowns on status page
+    // Check for global busy state or active cooldowns
     const secondsMatchStatus = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
     pvpCooldown = secondsMatchStatus ? parseInt(secondsMatchStatus[1]) : 0;
+    
+    // Parse action code from JS to determine activity type
+    const acMatch = html.match(/var\s+ac\s*=\s*['"]([^'"]+)['"]/i);
+    const currentAction = acMatch ? acMatch[1] : '';
 
-    const isWorking = html.toLowerCase().includes("trabajando") || html.toLowerCase().includes("cementerio");
-    const isInMission = html.toLowerCase().includes("misión") || html.toLowerCase().includes("gruta ancestral");
-    const isBusy = isWorking || isInMission;
+    const isWorking = currentAction === 'friedhof' || 
+                      html.toLowerCase().includes("trabajando") || 
+                      html.toLowerCase().includes("cementerio");
+                      
+    const isInMission = currentAction === 'ahnenstaette' || 
+                        html.toLowerCase().includes("misión") || 
+                        html.toLowerCase().includes("gruta ancestral");
+                        
+    const isManhunting = currentAction === 'raubzug' && 
+                         (html.toLowerCase().includes("caza de humanos") || html.toLowerCase().includes("cazando"));
+                         
+    const isBusy = isWorking || isInMission || isManhunting;
 
     if (pvpCooldown > 0) {
       const timeLeft = `${Math.floor(pvpCooldown / 60)}m ${pvpCooldown % 60}s`;
@@ -148,6 +161,8 @@ export async function fetchMonstersGameData(
         busyMsg = `Shadow Vigil: Character is currently working at the graveyard. Shift ends in ${timeLeft}.`;
       } else if (isInMission) {
         busyMsg = `Shadow Vigil: Character is currently on a mission in the Ancestral Grotto. Ends in ${timeLeft}.`;
+      } else if (isManhunting) {
+        busyMsg = `Shadow Vigil: Character is currently hunting humans. Hunt ends in ${timeLeft}.`;
       }
 
       logs.push({ 
@@ -155,7 +170,7 @@ export async function fetchMonstersGameData(
         message: busyMsg, 
         timestamp: new Date().toISOString() 
       });
-      logDebug(`[SYNC] Initial Busy State detected: ${isWorking ? 'WORKING' : isInMission ? 'MISSION' : 'PVP_COOLDOWN'}. Time left: ${pvpCooldown}s`);
+      logDebug(`[SYNC] Busy State: ${isWorking ? 'WORKING' : isInMission ? 'MISSION' : isManhunting ? 'MANHUNTING' : 'PVP_COOLDOWN'}. Time: ${pvpCooldown}s`);
     }
 
     // --- STEP 2: AUTOMATION RITUALS ---
