@@ -40,7 +40,7 @@ export function StatusHeader() {
       interval = setInterval(() => {
         setUptime(prev => prev + 1);
         // Periodic sync and action cycle every 60 seconds
-        if (uptime > 0 && uptime % 60 === 0) {
+        if (uptime % 60 === 0) {
           triggerSync();
         }
       }, 1000);
@@ -75,7 +75,7 @@ export function StatusHeader() {
       });
 
       // Update character stats in Firestore
-      setDocumentNonBlocking(userDocRef, {
+      const updateData: any = {
         id: user.uid,
         race: result.race,
         level: result.stats.level,
@@ -87,7 +87,14 @@ export function StatusHeader() {
         skillAverage: result.stats.skillAverage,
         attributes: result.stats.attributes,
         lastSync: serverTimestamp(),
-      }, { merge: true });
+      };
+
+      // Track last PvP action for the 15m rule UI
+      if (result.logs.some(l => l.type === 'BATTLE')) {
+        updateData.lastPvpAction = serverTimestamp();
+      }
+
+      setDocumentNonBlocking(userDocRef, updateData, { merge: true });
 
       // Save activity logs to the "Chronicles"
       const logsRef = collection(db, 'users', user.uid, 'activityLogs');
