@@ -57,10 +57,24 @@ export async function fetchMonstersGameData(
     logDebug(`[DEBUG] Initiating MoonID Auth for: ${username}`);
     
     // 1. Authenticate with MoonID
+    // Enhanced headers to mimic a real browser login and avoid 403 errors
     const loginResponse = await fetch('https://moonid.net/api/account/connect/83/', {
       method: 'POST',
       headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+        'Cache-Control': 'max-age=0',
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Origin': 'https://moonid.net',
+        'Referer': 'https://moonid.net/account/login/',
+        'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
         'User-Agent': userAgent,
       },
       body: new URLSearchParams({
@@ -71,6 +85,12 @@ export async function fetchMonstersGameData(
     });
 
     logDebug(`[DEBUG] MoonID Response Status: ${loginResponse.status}`);
+    
+    if (loginResponse.status === 403) {
+      logDebug(`[DEBUG] CRITICAL: MoonID Sanctuary denied entry (403). Possible bot protection or rate limiting.`);
+      throw new Error("Forbidden: MoonID sanctuary denied access. Ensure credentials are valid and try again later.");
+    }
+
     const setCookies = loginResponse.headers.getSetCookie();
     cookies.push(...setCookies.map(c => c.split(';')[0]));
     logDebug(`[DEBUG] Collected ${cookies.length} cookies from MoonID`);
@@ -89,29 +109,30 @@ export async function fetchMonstersGameData(
     const html = await statusResponse.text();
     logDebug(`[DEBUG] HTML Length: ${html.length} chars`);
 
-    // 3. Extract Stats using Regex targeting the Spanish UI
+    // 3. Extract Stats using Regex targeting the Spanish UI provided by user
     const extract = (regex: RegExp, content: string) => {
       const match = content.match(regex);
       return match ? match[1] : null;
     };
 
-    // Extracting from Statbar (very reliable summary)
+    // Extracting from Statbar (reliable summary provided in user snippet)
     const rawGold = extract(/id="goldbalance">([\d,.]+)<\/span>/i, html);
     const gold = parseMGNumber(rawGold);
     logDebug(`[DEBUG] Parsed Gold: ${gold} (Raw: ${rawGold})`);
     
-    // Experiencia: 1411 / 1445
+    // Experiencia: 1411 / 1445 (from statbar snippet)
     const expMatch = html.match(/Experiencia:\s*(\d+)\s*\/\s*(\d+)/i);
     const experience = expMatch ? parseInt(expMatch[1]) : 0;
     const nextLevelExp = expMatch ? parseInt(expMatch[2]) : 0;
     logDebug(`[DEBUG] Exp: ${experience}/${nextLevelExp}`);
 
-    // Nivel 17
+    // Nivel 17 (from skills table snippet)
     const levelMatch = html.match(/char_level">Nivel\s*(\d+)<\/span>/i);
     const level = levelMatch ? parseInt(levelMatch[1]) : 0;
     logDebug(`[DEBUG] Level: ${level}`);
 
-    // Attributes from the main skills table
+    // Attributes from the provided skills table HTML structure
+    // Fuerza: ... (55)
     const str = parseInt(extract(/Fuerza:.*?\((\d+)\)/si, html) || '10');
     const def = parseInt(extract(/Defensa:.*?\((\d+)\)/si, html) || '10');
     const agi = parseInt(extract(/Agilidad:.*?\((\d+)\)/si, html) || '10');
@@ -119,8 +140,8 @@ export async function fetchMonstersGameData(
     const dex = parseInt(extract(/Destreza:.*?\((\d+)\)/si, html) || '10');
     logDebug(`[DEBUG] Stats -> STR: ${str}, DEF: ${def}, AGI: ${agi}, CON: ${con}, DEX: ${dex}`);
 
-    // Energía vital: 780
-    const rawStamina = extract(/Energía vital:\s*(\d+)/i, html);
+    // Energía vital: (780|780)
+    const rawStamina = extract(/Energía vital:.*?\((\d+)\|/si, html);
     const stamina = rawStamina ? parseInt(rawStamina) : 100;
 
     // Determine Race
