@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Lock, Mail, Globe, Save, Loader2 } from 'lucide-react';
+import { Lock, Mail, Globe, Save, Loader2, ExternalLink } from 'lucide-react';
 import { useUser, useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -19,7 +19,7 @@ export function CredentialManager() {
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [server, setServer] = useState('en1');
+  const [server, setServer] = useState('es1.monstersgame.moonid.net');
 
   const credentialRef = useMemoFirebase(() => {
     if (!db || !user) return null;
@@ -31,7 +31,7 @@ export function CredentialManager() {
   useEffect(() => {
     if (credentials) {
       setEmail(credentials.moonIdUsername || '');
-      setServer(credentials.description || 'en1');
+      setServer(credentials.description || 'es1.monstersgame.moonid.net');
     }
   }, [credentials]);
 
@@ -42,7 +42,7 @@ export function CredentialManager() {
       id: 'primary',
       userId: user.uid,
       moonIdUsername: email,
-      encryptedMoonIdPassword: password, // In a real app, encrypt this before sending
+      encryptedMoonIdPassword: password,
       description: server,
     }, { merge: true });
 
@@ -57,8 +57,18 @@ export function CredentialManager() {
   return (
     <Card className="gothic-border bg-card/50">
       <CardHeader>
-        <CardTitle className="text-accent flex items-center gap-2 font-headline">
-          <Lock className="w-5 h-5" /> MoonID Sanctuary
+        <CardTitle className="text-accent flex items-center justify-between font-headline">
+          <div className="flex items-center gap-2">
+            <Lock className="w-5 h-5" /> MoonID Sanctuary
+          </div>
+          <a 
+            href="https://moonid.net/account/login/?next=/api/account/connect/83/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-[10px] text-muted-foreground hover:text-accent flex items-center gap-1"
+          >
+            CONNECT API <ExternalLink className="w-2 h-2" />
+          </a>
         </CardTitle>
         <CardDescription>Your credentials are encrypted within the GrimAutomata vault.</CardDescription>
       </CardHeader>
@@ -94,10 +104,10 @@ export function CredentialManager() {
               <SelectValue placeholder="Select Server" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="en1">Server 1 (The Abyss)</SelectItem>
-              <SelectItem value="en2">Server 2 (The Void)</SelectItem>
-              <SelectItem value="de1">German Server 1 (Das Grab)</SelectItem>
-              <SelectItem value="us1">US Server 1 (Deadlands)</SelectItem>
+              <SelectItem value="es1.monstersgame.moonid.net">MonstersGame ES1 (Primary)</SelectItem>
+              <SelectItem value="en1.monstersgame.moonid.net">MonstersGame EN1 (The Abyss)</SelectItem>
+              <SelectItem value="de1.monstersgame.moonid.net">MonstersGame DE1 (Das Grab)</SelectItem>
+              <SelectItem value="us1.monstersgame.moonid.net">MonstersGame US1 (Deadlands)</SelectItem>
             </SelectContent>
           </Select>
         </div>

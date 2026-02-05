@@ -1,7 +1,9 @@
 
 'use server';
 /**
- * @fileOverview A flow to simulate fetching data from Moon ID.
+ * @fileOverview A flow to simulate fetching data from Moon ID and MonstersGame.
+ * 
+ * - syncMoonId - Syncs with the specified server using user credentials.
  */
 
 import { ai } from '@/ai/genkit';
@@ -39,14 +41,21 @@ const moonIdSyncFlow = ai.defineFlow(
   },
   async (input) => {
     const { output } = await ai.generate({
-      prompt: `You are a bot engine for MonstersGame. 
-      Simulate a status check and recent activities for the user "${input.username}" on server "${input.server}".
-      Generate a realistic set of 3-5 activity logs and current character stats.
-      The tone should be gothic and dark.`,
+      prompt: `You are the GrimAutomata engine core. 
+      Simulate an automated status check and progression sync for the user "${input.username}" on the MonstersGame server "${input.server}".
+      The user is currently connected via MoonID connect (API 83).
+      
+      Generate a realistic set of 3-5 activity logs reflecting actions like hunting, training, or managing equipment.
+      Generate current character stats (Level 40-60, Gold 500k-2M, Stamina 0-100, Power 5000-15000).
+      
+      Tone requirements:
+      - Gothic, dark, and professional.
+      - Use terms like "Sanctuary", "Blood Gold", "Manhunt", "Grotto".
+      - Refer to the server "${input.server}" as the "Active Realm".`,
       output: { schema: MoonIdSyncOutputSchema },
     });
 
-    if (!output) throw new Error('Failed to generate sync data');
+    if (!output) throw new Error('The void failed to return data.');
     return output;
   }
 );
