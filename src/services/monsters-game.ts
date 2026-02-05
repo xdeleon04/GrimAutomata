@@ -171,23 +171,16 @@ export async function fetchMonstersGameData(
         const huntPageRes = await fetch(huntPageUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
         const huntHtml = await huntPageRes.text();
 
-        // Check for cooldown text or the COUNTER div
-        const hasCooldownText = huntHtml.includes('every 15 minutes') || huntHtml.includes('cada 15 minutos') || huntHtml.includes('id="COUNTER"');
-        
-        // Parse SecondsCOUNTER from the script directly from the JS
+        // Detect cooldown from SecondsCOUNTER script variable
         const secondsMatch = huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
         pvpCooldown = secondsMatch ? parseInt(secondsMatch[1]) : 0;
         
-        if (pvpCooldown > 0 || hasCooldownText) {
+        if (pvpCooldown > 0) {
           const m = Math.floor(pvpCooldown / 60);
           const s = pvpCooldown % 60;
-          const displayTime = pvpCooldown > 0 ? `${m}m ${s}s` : "Waiting for ritual reset";
-          logs.push({ 
-            type: 'INFO', 
-            message: `Shadow Ritual: Resting. PvP cooldown active (${displayTime}).`, 
-            timestamp: new Date().toISOString() 
-          });
-          logDebug(`[AUTOMATA] Cooldown detected via SecondsCOUNTER: ${pvpCooldown}s`);
+          logDebug(`[AUTOMATA] PvP Cooldown active: ${m}m ${s}s`);
+          // We don't push a 'Resting' log every sync to avoid clutter. 
+          // The StatusHeader UI handles the countdown display.
         } else {
           const humanLimitReached = huntHtml.includes("used all of today's hunting time") || huntHtml.includes("ya has usado todo tu tiempo de caza");
           
@@ -247,7 +240,7 @@ export async function fetchMonstersGameData(
                   }
                 }
               } else if (searchHtml.includes("in vain") || searchHtml.includes("en vano")) {
-                logs.push({ type: 'INFO', message: `Shadow Ritual: District scan found no rivals in vain.`, timestamp: new Date().toISOString() });
+                logs.push({ type: 'INFO', message: `Shadow Ritual: District scan found no rivals.`, timestamp: new Date().toISOString() });
               }
             }
           } else if (settings.auto_manhunt) {
@@ -263,7 +256,7 @@ export async function fetchMonstersGameData(
         }
 
         // Grotto Fallback
-        if (settings.auto_grotto && !logs.some(l => l.type === 'MANHUNT' || l.type === 'BATTLE' || (l.type === 'INFO' && l.message.includes('Resting')))) {
+        if (settings.auto_grotto && !logs.some(l => l.type === 'MANHUNT' || l.type === 'BATTLE')) {
           const grottoUrl = `https://${server}/index.php?ac=ahnenstaette`;
           const gCheck = await fetch(grottoUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
           const gHtml = await gCheck.text();

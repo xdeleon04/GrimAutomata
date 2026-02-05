@@ -116,22 +116,32 @@ export function StatusHeader() {
         setUptime(prev => prev + 1);
         
         // Count down the cooldown in real-time
-        setCooldown(prev => Math.max(0, prev - 1));
+        let nextCooldownValue = 0;
+        setCooldown(prev => {
+          nextCooldownValue = Math.max(0, prev - 1);
+          return nextCooldownValue;
+        });
         
         const now = Date.now();
         const secondsSinceLastSync = (now - lastSyncRef.current) / 1000;
         
-        // Determine sync threshold
-        // Heartbeat is 60s during cooldown, 30s when active
-        const syncInterval = cooldown > 0 ? 60 : 30;
-        
-        // TRIGGER: Time reached OR cooldown just finished (cooldown was 1, now is 0)
-        if ((secondsSinceLastSync >= syncInterval || (cooldown === 1)) && !isSyncing) {
+        /**
+         * SMART SYNC LOGIC:
+         * 1. If cooldown was active and just reached zero: SYNC IMMEDIATELY.
+         * 2. If no cooldown is active: Sync every 60 seconds (heartbeat for stamina/stats).
+         * 3. Safety fallback: Sync every 5 minutes regardless of cooldown.
+         */
+        const justFinishedCooldown = cooldown > 0 && nextCooldownValue === 0;
+        const regularHeartbeat = cooldown === 0 && secondsSinceLastSync >= 60;
+        const safetyHeartbeat = secondsSinceLastSync >= 300;
+
+        if ((justFinishedCooldown || regularHeartbeat || safetyHeartbeat) && !isSyncing) {
           triggerSync();
         }
       }, 1000);
     } else {
       setUptime(0);
+      setCooldown(0);
     }
     return () => clearInterval(interval);
   }, [isRunning, cooldown, isSyncing, triggerSync]);
@@ -145,7 +155,7 @@ export function StatusHeader() {
 
   const handleToggle = () => {
     if (!isRunning && credentials) {
-      // Small delay to allow state to settle
+      // Trigger initial sync when starting
       setTimeout(() => triggerSync(), 100);
     }
     setIsRunning(!isRunning);
