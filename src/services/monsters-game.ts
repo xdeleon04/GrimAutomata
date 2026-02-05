@@ -43,14 +43,20 @@ function parseMGNumber(str: string | null): number {
 }
 
 /**
- * Formats seconds into a human-readable duration string.
+ * Formats seconds into a human-readable duration string (Xh Ym Zs).
  */
 function formatDuration(seconds: number): string {
+  if (seconds <= 0) return "0s";
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  return `${m}m ${s}s`;
+  
+  const parts = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  if (s > 0 || (h === 0 && m === 0)) parts.push(`${s}s`);
+  
+  return parts.join(' ');
 }
 
 /**
@@ -153,11 +159,13 @@ export async function fetchMonstersGameData(
 
     const isWorking = currentAction === 'friedhof' || 
                       html.toLowerCase().includes("trabajando") || 
-                      html.toLowerCase().includes("cementerio");
+                      html.toLowerCase().includes("cementerio") ||
+                      html.toLowerCase().includes("friedhof");
                       
     const isInMission = currentAction === 'ahnenstaette' || 
                         html.toLowerCase().includes("misión") || 
-                        html.toLowerCase().includes("gruta ancestral");
+                        html.toLowerCase().includes("gruta ancestral") ||
+                        html.toLowerCase().includes("mision");
                         
     const isManhunting = currentAction === 'raubzug' && 
                          (html.toLowerCase().includes("caza de humanos") || html.toLowerCase().includes("cazando"));
@@ -188,12 +196,13 @@ export async function fetchMonstersGameData(
     if (!isBusy && pvpCooldown === 0) {
       if (stamina <= thresholdValue) {
         if (settings.auto_work !== false) {
-          // Stamina/HP restores at a rate of 10 per hour according to the guide.
-          const pointsNeeded = thresholdValue - stamina + (maxStamina * 0.1); 
+          // Stamina/HP restores at a rate of 10 per hour according to official guide.
+          // We target threshold + a 20 point buffer to ensure we don't immediately drop below again.
+          const pointsNeeded = Math.max(0, thresholdValue - stamina + 20); 
           const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 10))); 
           
           const workUrl = `https://${server}/index.php?ac=friedhof`;
-          logDebug(`[AUTOMATA] Energy below threshold (${stamina}/${thresholdValue.toFixed(0)}). Initiating graveyard shift for ${hoursToWork}h (Rate: 10/hr).`);
+          logDebug(`[AUTOMATA] Energy below threshold (${stamina.toFixed(0)}/${thresholdValue.toFixed(0)}). Initiating graveyard shift for ${hoursToWork}h (Rate: 10/hr).`);
           
           const workPayload = new URLSearchParams({
             ac: 'friedhof',
