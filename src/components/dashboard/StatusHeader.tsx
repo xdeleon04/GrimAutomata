@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Power, Play, Square, Activity, ShieldAlert, Swords, Loader2, Bug, BugOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -38,34 +38,7 @@ export function StatusHeader() {
   const { data: credentials } = useDoc(credentialRef);
   const { data: settings } = useCollection(settingsQuery);
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isRunning) {
-      interval = setInterval(() => {
-        setUptime(prev => prev + 1);
-        
-        // Count down the cooldown in real-time
-        setCooldown(prev => Math.max(0, prev - 1));
-        
-        const now = Date.now();
-        const secondsSinceLastSync = (now - lastSyncRef.current) / 1000;
-        
-        // Decide whether to trigger sync based on state
-        // If in cooldown, sync every 60s to check for updates
-        // If not in cooldown, we sync every 30s to be reactive
-        const syncInterval = cooldown > 0 ? 60 : 30;
-        
-        if (secondsSinceLastSync >= syncInterval && !isSyncing) {
-          triggerSync();
-        }
-      }, 1000);
-    } else {
-      setUptime(0);
-    }
-    return () => clearInterval(interval);
-  }, [isRunning, cooldown, isSyncing]);
-
-  const triggerSync = async () => {
+  const triggerSync = useCallback(async () => {
     if (!user || !db || !credentials || !userDocRef || isSyncing) return;
     
     setIsSyncing(true);
@@ -134,7 +107,34 @@ export function StatusHeader() {
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, [user, db, credentials, userDocRef, isSyncing, settings, debugMode]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isRunning) {
+      interval = setInterval(() => {
+        setUptime(prev => prev + 1);
+        
+        // Count down the cooldown in real-time
+        setCooldown(prev => Math.max(0, prev - 1));
+        
+        const now = Date.now();
+        const secondsSinceLastSync = (now - lastSyncRef.current) / 1000;
+        
+        // Determine sync threshold
+        // Heartbeat is 60s during cooldown, 30s when active
+        const syncInterval = cooldown > 0 ? 60 : 30;
+        
+        // TRIGGER: Time reached OR cooldown just finished (cooldown was 1, now is 0)
+        if ((secondsSinceLastSync >= syncInterval || (cooldown === 1)) && !isSyncing) {
+          triggerSync();
+        }
+      }, 1000);
+    } else {
+      setUptime(0);
+    }
+    return () => clearInterval(interval);
+  }, [isRunning, cooldown, isSyncing, triggerSync]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -145,7 +145,8 @@ export function StatusHeader() {
 
   const handleToggle = () => {
     if (!isRunning && credentials) {
-      triggerSync();
+      // Small delay to allow state to settle
+      setTimeout(() => triggerSync(), 100);
     }
     setIsRunning(!isRunning);
   };
