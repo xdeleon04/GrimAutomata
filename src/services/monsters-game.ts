@@ -64,7 +64,7 @@ export async function fetchMonstersGameData(
       });
     };
 
-    logDebug(`[DEBUG] Step 1: Visiting MoonID Login Page for Session/CSRF`);
+    logDebug(`[DEBUG] Ritual Step 1: Visiting MoonID Login Sanctum`);
     
     // 1a. Get initial session cookies and CSRF token
     const preAuthResponse = await fetch('https://moonid.net/account/login/', {
@@ -75,11 +75,11 @@ export async function fetchMonstersGameData(
     
     const csrfMatch = preAuthHtml.match(/name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i);
     const csrfToken = csrfMatch ? csrfMatch[1] : '';
-    logDebug(`[DEBUG] CSRF Token found: ${csrfToken ? 'YES' : 'NO'}`);
+    logDebug(`[DEBUG] Gatekeeper Token (CSRF): ${csrfToken ? 'CAPTURED' : 'MISSING'}`);
 
-    logDebug(`[DEBUG] Step 2: Authenticating with MoonID (POST)`);
+    logDebug(`[DEBUG] Ritual Step 2: Binding Identity to MoonID`);
     
-    // 1b. Perform Login (mimicking the payload from DevTools)
+    // 1b. Perform Login
     const loginPayload = new URLSearchParams({
       csrfmiddlewaretoken: csrfToken,
       username: username,
@@ -103,19 +103,14 @@ export async function fetchMonstersGameData(
       redirect: 'manual'
     });
 
-    logDebug(`[DEBUG] MoonID Auth Status: ${loginResponse.status}`);
+    logDebug(`[DEBUG] MoonID Gate Status: ${loginResponse.status}`);
     updateCookies(loginResponse.headers.getSetCookie());
 
-    if (loginResponse.status === 403) {
-      logDebug(`[DEBUG] CRITICAL: MoonID Sanctuary denied entry (403). Possible bot protection.`);
-      throw new Error("Forbidden: MoonID sanctuary denied access.");
-    }
-
-    // 1c. Follow Redirect to API Connect
+    // 1c. Follow Redirect to API Connect (This is crucial for establishing the game session)
     let targetUrl = loginResponse.headers.get('Location');
     if (loginResponse.status === 302 && targetUrl) {
       if (targetUrl.startsWith('/')) targetUrl = 'https://moonid.net' + targetUrl;
-      logDebug(`[DEBUG] Redirecting to Connect API: ${targetUrl}`);
+      logDebug(`[DEBUG] Descending to Connect API: ${targetUrl}`);
       
       const connectResponse = await fetch(targetUrl, {
         headers: {
@@ -130,7 +125,7 @@ export async function fetchMonstersGameData(
       // 1d. Follow final redirect to the game server
       let gameUrl = connectResponse.headers.get('Location');
       if (gameUrl) {
-        logDebug(`[DEBUG] Finalizing connection to Game Realm: ${gameUrl}`);
+        logDebug(`[DEBUG] Finalizing connection to Realm Core: ${gameUrl}`);
         const gameInitResponse = await fetch(gameUrl, {
           headers: {
             'Cookie': getCookieString(),
@@ -140,11 +135,13 @@ export async function fetchMonstersGameData(
         });
         updateCookies(gameInitResponse.headers.getSetCookie());
       }
+    } else if (loginResponse.status === 403) {
+      throw new Error("Sanctum denied entry (403). Gateway protection detected.");
     }
 
     // 2. Connect to the specific game server status page
     const statusUrl = `https://${server}/index.php?ac=status`;
-    logDebug(`[DEBUG] Step 3: Penetrating Realm Status: ${statusUrl}`);
+    logDebug(`[DEBUG] Ritual Step 3: Scanning Character Scrolls at ${statusUrl}`);
     
     const statusResponse = await fetch(statusUrl, {
       headers: {
@@ -155,26 +152,28 @@ export async function fetchMonstersGameData(
     });
 
     const html = await statusResponse.text();
-    logDebug(`[DEBUG] Sanctuary HTML Length: ${html.length} chars`);
+    logDebug(`[DEBUG] Scroll Data Length: ${html.length} symbols`);
 
-    // Extract Stats using Regex targeting the Spanish UI provided by the user
+    // Extract Stats using robust Regex targeting the Spanish UI
     const extract = (regex: RegExp, content: string) => {
       const match = content.match(regex);
       return match ? match[1] : null;
     };
 
-    // Extracting from Statbar (Reliable summary)
+    // Extracting from Statbar (Reliable summary at the bottom)
     const rawGold = extract(/id="goldbalance">([\d,.]+)<\/span>/i, html);
     const gold = parseMGNumber(rawGold);
     
-    // Experiencia: 1411 / 1445 (Targeting the #statbar or Skill Table format)
+    // Experiencia: 1411 / 1445 (Targeting the statbarEntry)
     const expMatch = html.match(/Experiencia:\s*([\d.]+)\s*\/\s*([\d.]+)/i);
     const experience = expMatch ? parseInt(expMatch[1].replace(/\./g, '')) : 0;
     const nextLevelExp = expMatch ? parseInt(expMatch[2].replace(/\./g, '')) : 0;
 
-    // Nivel 17
-    const levelMatch = html.match(/char_level">Nivel\s*(\d+)<\/span>/i);
+    // Nivel del personaje (Targeting the char_level span in the habilidades table)
+    // <span class="char_level">Nivel 17</span>
+    const levelMatch = html.match(/class="char_level"[^>]*>(?:Nivel\s*)?(\d+)/i);
     const level = levelMatch ? parseInt(levelMatch[1]) : 0;
+    logDebug(`[DEBUG] Extracted Character Level: ${level}`);
 
     // Attributes from Spanish skills table
     const str = parseInt(extract(/Fuerza:.*?\((\d+)\)/si, html) || '0');
@@ -184,12 +183,13 @@ export async function fetchMonstersGameData(
     const dex = parseInt(extract(/Destreza:.*?\((\d+)\)/si, html) || '0');
 
     // Energía vital: (780|780)
-    const rawStamina = extract(/Energía vital:.*?\((\d+)\|/si, html);
+    const rawStamina = extract(/Energía\s+vital:.*?\((\d+)\|/si, html);
     const stamina = rawStamina ? parseInt(rawStamina) : 100;
 
-    // Determine Race
-    const race: 'Vampire' | 'Werewolf' = html.toLowerCase().includes('vampiro') ? 'Vampire' : 'Werewolf';
-    logDebug(`[DEBUG] Final Stats -> Level: ${level}, Gold: ${gold}, Race: ${race}`);
+    // Determine Race (Check for Spanish terms)
+    const race: 'Vampire' | 'Werewolf' = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
+    
+    logDebug(`[DEBUG] Final Stats Scanned -> Level: ${level}, Gold: ${gold}, Race: ${race}, STR: ${str}, CON: ${con}`);
 
     const logs: MonstersGameStats['logs'] = [];
     debugLogs.forEach(msg => {
@@ -200,7 +200,7 @@ export async function fetchMonstersGameData(
       });
     });
 
-    if (html.includes("You're still at work") || html.includes("Todavía estás trabajando")) {
+    if (html.includes("You're still at work") || html.includes("Todavía estás trabajando") || html.includes("estás trabajando")) {
       logs.push({
         type: 'INFO',
         message: 'Currently performing a ritual of labor in the mortal realm (Working).',
@@ -211,7 +211,7 @@ export async function fetchMonstersGameData(
     if (logs.length === 0 || (debug && logs.length === debugLogs.length)) {
       logs.push({
         type: 'INFO',
-        message: `Realm synchronization successful. Level ${level} ${race} detected.`,
+        message: `Sanctuary synchronization complete. Level ${level} ${race} scrolls verified.`,
         timestamp: new Date().toISOString()
       });
     }
@@ -235,7 +235,7 @@ export async function fetchMonstersGameData(
       logs
     };
   } catch (error: any) {
-    console.error('MonstersGame Service Error:', error);
+    console.error('MonstersGame Service Ritual Failure:', error);
     return {
       race: 'Vampire',
       stats: { level: 0, gold: 0, stamina: 0, experience: 0, nextLevelExp: 0, attributes: { strength: 0, defense: 0, dexterity: 0, agility: 0, constitution: 0 } },
