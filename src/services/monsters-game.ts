@@ -1,3 +1,4 @@
+
 /**
  * @fileOverview Service for interacting with MonstersGame via MoonID.
  * Handles authentication, cookie persistence, and active ritual execution (automations).
@@ -143,14 +144,15 @@ export async function fetchMonstersGameData(
       const huntPageRes = await fetch(huntPageUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
       const huntHtml = await huntPageRes.text();
 
-      // Detect PvP Cooldown via the COUNTER div - CRITICAL: Log this if found
+      // Detect PvP Cooldown via the COUNTER div
       const counterMatch = huntHtml.match(/id=["']COUNTER["'][^>]*>([\d:]+)</i);
 
       if (counterMatch) {
-        logDebug(`[AUTOMATA] PvP Cooldown active: ${counterMatch[1]}`);
+        const cooldownRemaining = counterMatch[1];
+        logDebug(`[AUTOMATA] PvP Cooldown active: ${cooldownRemaining}`);
         logs.push({ 
           type: 'INFO', 
-          message: `Shadow Ritual: Resting in shadows. PvP cooldown active (${counterMatch[1]} remaining).`, 
+          message: `Shadow Ritual: Resting in shadows. PvP cooldown active (${cooldownRemaining} remaining).`, 
           timestamp: new Date().toISOString() 
         });
       } else {
@@ -167,13 +169,14 @@ export async function fetchMonstersGameData(
           
           if (settings.pvp_attack) {
             const targetName = settings.pvp_target_name;
-            logDebug(`[AUTOMATA] Initiating ${targetName ? `targeted hunt for [${targetName}]` : 'random district hunt'}...`);
+            const searchOpt = settings.pvp_search_strategy || '';
+            logDebug(`[AUTOMATA] Initiating ${targetName ? `targeted hunt for [${targetName}]` : 'district hunt'} with strategy [${searchOpt || 'Normal'}]...`);
             
             const pvpSearchPayload = new URLSearchParams({
               ac: 'raubzug',
               sac: 'gegner',
               searchname: targetName || '',
-              searchopt: targetName ? '' : '',
+              searchopt: searchOpt,
             });
 
             const pvpSearchRes = await fetch(huntPageUrl, {
@@ -186,7 +189,6 @@ export async function fetchMonstersGameData(
             
             if (huntResultHtml.includes("successful") || huntResultHtml.includes("Exitoso")) {
               const gegnerIdMatch = huntResultHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
-              // Extract the rival name accurately from the successful tracking message
               const opponentNameMatch = huntResultHtml.match(/tracked down the (?:Hombre Lobo|Vampiro|Adversario|Hombre-Lobo)\s+([^ ]+)\s+and/i)
                                      || huntResultHtml.match(/<div class=["']headerRow["'][^>]*>(?:Hombre Lobo|Vampiro)\s+(.*?)<\/div>/i);
               const opponentName = opponentNameMatch ? opponentNameMatch[1].trim() : (targetName || "Unknown Rival");
@@ -211,7 +213,6 @@ export async function fetchMonstersGameData(
                 });
                 
                 const battleHtml = await battleRes.text();
-                // Extract winner, loot, and exp from the detailed report
                 const winnerMatch = battleHtml.match(/class=["']headerRowCWinner["'][^>]*>(?:Vencedor\/a:\s*)?(.*?)<\/div>/i)
                                   || battleHtml.match(/<td colspan=["']3["'] class=["']tdh["']>Vencedor\/a:\s*(.*?)<\/td>/i);
                 const lootMatch = battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i);
@@ -230,7 +231,6 @@ export async function fetchMonstersGameData(
                   });
                 } else {
                   logDebug(`[ERROR] Failed to parse battle results.`);
-                  logs.push({ type: 'ERROR', message: `Ritual Interrupted: Could not discern battle outcome from the scrolls.`, timestamp: new Date().toISOString() });
                 }
               }
             } else if (huntResultHtml.includes("scanned the area") || huntResultHtml.includes("in vain")) {
@@ -309,7 +309,7 @@ export async function fetchMonstersGameData(
       }
     };
 
-    logDebug(`[SYNC] Final Stats Sync OK. Skill Average: ${stats.skillAverage}`);
+    logDebug(`[SYNC] Final Stats Sync OK.`);
 
     return { race, stats, logs };
 

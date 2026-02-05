@@ -9,7 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target } from 'lucide-react';
+import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target, Search } from 'lucide-react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { collection, doc } from 'firebase/firestore';
@@ -107,7 +107,7 @@ export function ConfigPanel() {
                 </Select>
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between border-t pt-4">
                 <div className="space-y-0.5">
                   <Label>PVP: Attack Opponents</Label>
                   <p className="text-xs text-muted-foreground">Automatically attack members of the opposite race.</p>
@@ -116,6 +116,24 @@ export function ConfigPanel() {
                   checked={getSetting('pvp_attack', false)} 
                   onCheckedChange={(checked) => updateSetting('pvp_attack', checked)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs flex items-center gap-2">
+                  <Search className="w-3 h-3" /> Search Strategy
+                </Label>
+                <Select 
+                  value={getSetting('pvp_search_strategy', '')} 
+                  onValueChange={(value) => updateSetting('pvp_search_strategy', value)}
+                >
+                  <SelectTrigger className="h-8 bg-background/50">
+                    <SelectValue placeholder="Select strategy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Normal Search</SelectItem>
+                    <SelectItem value="17">Stronger or Equal Rivals</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
