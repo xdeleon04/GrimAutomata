@@ -27,19 +27,20 @@ export function QuickStats() {
     );
   }
 
-  const stats = userData || {
-    race: 'Vampire',
-    level: 0,
-    gold: 0,
-    stamina: 0,
-    experience: 0,
-    nextLevelExp: 100,
+  // Normalize stats with defaults to prevent hydration and null-reference errors
+  const stats = {
+    race: userData?.race || 'Vampire',
+    level: userData?.level ?? 0,
+    gold: userData?.gold ?? 0,
+    stamina: userData?.stamina ?? 0,
+    experience: userData?.experience ?? 0,
+    nextLevelExp: userData?.nextLevelExp ?? 100,
     attributes: {
-      strength: 0,
-      defense: 0,
-      dexterity: 0,
-      agility: 0,
-      constitution: 0
+      strength: userData?.attributes?.strength ?? 0,
+      defense: userData?.attributes?.defense ?? 0,
+      dexterity: userData?.attributes?.dexterity ?? 0,
+      agility: userData?.attributes?.agility ?? 0,
+      constitution: userData?.attributes?.constitution ?? 0,
     }
   };
 
@@ -68,17 +69,17 @@ export function QuickStats() {
         />
         <StatCard 
           label="Shadow Power" 
-          value={(Object.values(stats.attributes || {}).reduce((a: number, b: number) => a + b, 0)).toString()} 
+          value={(Object.values(stats.attributes).reduce((a: number, b: number) => a + b, 0)).toString()} 
           icon={<Shield className="text-accent w-4 h-4" />} 
         />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <AttributeMiniCard label="STR" value={stats.attributes?.strength?.toString() || '0'} icon={<Swords className="w-3 h-3" />} />
-        <AttributeMiniCard label="DEF" value={stats.attributes?.defense?.toString() || '0'} icon={<Shield className="w-3 h-3" />} />
-        <AttributeMiniCard label="DEX" value={stats.attributes?.dexterity?.toString() || '0'} icon={<Target className="w-3 h-3" />} />
-        <AttributeMiniCard label="AGI" value={stats.attributes?.agility?.toString() || '0'} icon={<Wind className="w-3 h-3" />} />
-        <AttributeMiniCard label="CON" value={stats.attributes?.constitution?.toString() || '0'} icon={<Heart className="w-3 h-3" />} />
+        <AttributeMiniCard label="STR" value={stats.attributes.strength.toString()} icon={<Swords className="w-3 h-3" />} />
+        <AttributeMiniCard label="DEF" value={stats.attributes.defense.toString()} icon={<Shield className="w-3 h-3" />} />
+        <AttributeMiniCard label="DEX" value={stats.attributes.dexterity.toString()} icon={<Target className="w-3 h-3" />} />
+        <AttributeMiniCard label="AGI" value={stats.attributes.agility.toString()} icon={<Wind className="w-3 h-3" />} />
+        <AttributeMiniCard label="CON" value={stats.attributes.constitution.toString()} icon={<Heart className="w-3 h-3" />} />
       </div>
     </div>
   );
