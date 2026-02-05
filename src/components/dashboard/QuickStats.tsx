@@ -1,4 +1,3 @@
-
 "use client"
 
 import React from 'react';
@@ -36,6 +35,7 @@ export function QuickStats() {
     maxStamina: userData?.maxStamina ?? 100,
     experience: userData?.experience ?? 0,
     nextLevelExp: userData?.nextLevelExp ?? 100,
+    skillAverage: userData?.skillAverage ?? 0,
     attributes: {
       strength: userData?.attributes?.strength ?? 0,
       defense: userData?.attributes?.defense ?? 0,
@@ -71,7 +71,7 @@ export function QuickStats() {
         />
         <StatCard 
           label="Shadow Power" 
-          value={(Object.values(stats.attributes).reduce((a: number, b: number) => a + b, 0)).toString()} 
+          value={stats.skillAverage > 0 ? stats.skillAverage.toFixed(2) : (Object.values(stats.attributes).reduce((a: number, b: number) => a + b, 0)).toString()} 
           icon={<Shield className="text-accent w-4 h-4" />} 
         />
       </div>

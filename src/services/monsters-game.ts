@@ -1,4 +1,3 @@
-
 /**
  * @fileOverview Service for interacting with MonstersGame via MoonID.
  * Handles authentication, cookie persistence, and HTML scraping from the game realm.
@@ -18,6 +17,7 @@ export interface MonstersGameStats {
     maxStamina: number;
     experience: number;
     nextLevelExp: number;
+    skillAverage: number;
     attributes: {
       strength: number;
       defense: number;
@@ -33,6 +33,7 @@ export interface MonstersGameStats {
  */
 function parseMGNumber(str: string | null): number {
   if (!str) return 0;
+  // Remove thousands separator (dot) and replace decimal separator (comma) with dot
   const normalized = str.replace(/\./g, '').replace(',', '.');
   return parseFloat(normalized) || 0;
 }
@@ -67,7 +68,10 @@ export async function fetchMonstersGameData(
 
     logDebug(`[DEBUG] Step 1: Visiting MoonID Login`);
     const preAuthResponse = await fetch('https://moonid.net/account/login/', {
-      headers: { 'User-Agent': userAgent }
+      headers: { 
+        'User-Agent': userAgent,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+      }
     });
     updateCookies(preAuthResponse.headers.getSetCookie());
     const preAuthHtml = await preAuthResponse.text();
@@ -89,6 +93,7 @@ export async function fetchMonstersGameData(
         'Content-Type': 'application/x-www-form-urlencoded',
         'Cookie': getCookieString(),
         'User-Agent': userAgent,
+        'Origin': 'https://moonid.net',
         'Referer': 'https://moonid.net/account/login/'
       },
       body: loginPayload,
@@ -99,6 +104,7 @@ export async function fetchMonstersGameData(
 
     let targetUrl = loginResponse.headers.get('Location');
     if (loginResponse.status === 302 && targetUrl) {
+      logDebug(`[DEBUG] Step 3: Following MoonID Redirect to ${targetUrl}`);
       if (targetUrl.startsWith('/')) targetUrl = 'https://moonid.net' + targetUrl;
       const connectResponse = await fetch(targetUrl, {
         headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent },
@@ -108,6 +114,7 @@ export async function fetchMonstersGameData(
       
       const gameUrl = connectResponse.headers.get('Location');
       if (gameUrl) {
+        logDebug(`[DEBUG] Step 4: Finalizing Connection to Game Server ${gameUrl}`);
         const gameInitResponse = await fetch(gameUrl, {
           headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent },
           redirect: 'manual'
@@ -118,27 +125,36 @@ export async function fetchMonstersGameData(
 
     const statusUrl = `https://${server}/index.php?ac=status`;
     const statusResponse = await fetch(statusUrl, {
-      headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent }
+      headers: { 
+        'Cookie': getCookieString(), 
+        'User-Agent': userAgent,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+      }
     });
 
     const html = await statusResponse.text();
 
-    // Stats Extraction
-    const extractValue = (regex: RegExp, content: string) => {
-      const match = content.match(regex);
-      return match ? match[1] : null;
-    };
-
-    const levelMatch = html.match(/class="char_level"[^>]*>(?:Nivel\s*)?(\d+)/i);
+    // Stats Extraction using regex for the provided Spanish HTML structure
+    const levelMatch = html.match(/class="char_level">Nivel\s*(\d+)/i) || html.match(/class="char_level">(\d+)/i);
     const level = levelMatch ? parseInt(levelMatch[1]) : 0;
     
-    const gold = parseMGNumber(extractValue(/id="goldbalance">([\d,.]+)<\/span>/i, html));
+    // Gold extraction from #goldbalance in the statbar
+    const goldMatch = html.match(/id="goldbalance">([\d,.]+)</i);
+    const gold = parseMGNumber(goldMatch ? goldMatch[1] : "0");
     
+    // Skill Average (Shadow Power candidate)
+    const skillAvgMatch = html.match(/id="statbarSkillAverage"[^>]*>Promedio de Habilidad:\s*([\d,.]+)/i) || 
+                         html.match(/Promedio de Habilidad:.*?([\d,.]+)/i);
+    const skillAverage = parseMGNumber(skillAvgMatch ? skillAvgMatch[1] : "0");
+
+    // Experience: (current|max) format
     const expMatch = html.match(/Experiencia:\s*([\d.]+)\s*[\/|]\s*([\d.]+)/i) || 
-                     html.match(/Experiencia total:.*?\((\d+)\|(\d+)\)/si);
+                     html.match(/Experiencia total:.*?\((\d+)[|/](\d+)\)/si) ||
+                     html.match(/Experiencia:\s*(\d+)\s*\/\s*(\d+)/i);
     const experience = expMatch ? parseInt(expMatch[1].replace(/\./g, '')) : 0;
     const nextLevelExp = expMatch ? parseInt(expMatch[2].replace(/\./g, '')) : 100;
 
+    // Attributes from the table
     const findStat = (label: string) => {
       const regex = new RegExp(`${label}:.*?\\((\\d+)\\)`, 'si');
       const match = html.match(regex);
@@ -151,9 +167,9 @@ export async function fetchMonstersGameData(
     const con = findStat('Resistencia');
     const dex = findStat('Destreza');
 
-    // Stamina: Prioritize the (current|max) format from the skills table
+    // Stamina/Energy from the table
     const staminaMatch = html.match(/Energía\s+vital:.*?\((\d+)[|/](\d+)\)/si);
-    const stamina = staminaMatch ? parseInt(staminaMatch[1]) : 100;
+    const stamina = staminaMatch ? parseInt(staminaMatch[1]) : 0;
     const maxStamina = staminaMatch ? parseInt(staminaMatch[2]) : 100;
 
     const race: 'Vampire' | 'Werewolf' = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
@@ -163,24 +179,31 @@ export async function fetchMonstersGameData(
       logs.push({ type: 'DEBUG', message: msg, timestamp: new Date().toISOString() });
     });
 
-    if (html.includes("You're still at work") || html.includes("estás trabajando")) {
+    if (html.includes("You're still at work") || html.includes("estás trabajando") || html.includes("trabajando")) {
       logs.push({
         type: 'INFO',
         message: 'Currently performing a ritual of labor (Working). System on standby.',
         timestamp: new Date().toISOString()
       });
-    } else {
+    } else if (level > 0) {
       logs.push({
         type: 'INFO',
-        message: `Sanctuary synchronization complete. Level ${level} ${race} verified.`,
+        message: `Sanctuary synchronization complete. Level ${level} ${race} scrolls verified.`,
         timestamp: new Date().toISOString()
       });
+    } else {
+      logs.push({
+        type: 'ERROR',
+        message: 'Realm accessed, but identity scrolls were illegible (Parsing failure).',
+        timestamp: new Date().toISOString()
+      });
+      logDebug(`[DEBUG] HTML Fragment for debugging: ${html.substring(0, 500)}`);
     }
 
     return {
       race,
       stats: {
-        level, gold, stamina, maxStamina, experience, nextLevelExp,
+        level, gold, stamina, maxStamina, experience, nextLevelExp, skillAverage,
         attributes: { strength: str, defense: def, dexterity: dex, agility: agi, constitution: con }
       },
       logs
@@ -188,7 +211,7 @@ export async function fetchMonstersGameData(
   } catch (error: any) {
     return {
       race: 'Vampire',
-      stats: { level: 0, gold: 0, stamina: 0, maxStamina: 100, experience: 0, nextLevelExp: 0, attributes: { strength: 0, defense: 0, dexterity: 0, agility: 0, constitution: 0 } },
+      stats: { level: 0, gold: 0, stamina: 0, maxStamina: 100, experience: 0, nextLevelExp: 0, skillAverage: 0, attributes: { strength: 0, defense: 0, dexterity: 0, agility: 0, constitution: 0 } },
       logs: [{ type: 'ERROR', message: `Ritual failed: ${error.message}`, timestamp: new Date().toISOString() }]
     };
   }

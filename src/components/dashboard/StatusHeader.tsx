@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useEffect } from 'react';
@@ -67,6 +66,7 @@ export function StatusHeader() {
         maxStamina: result.stats.maxStamina,
         experience: result.stats.experience,
         nextLevelExp: result.stats.nextLevelExp,
+        skillAverage: result.stats.skillAverage,
         attributes: result.stats.attributes,
         lastSync: serverTimestamp(),
       }, { merge: true });
