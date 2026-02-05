@@ -123,14 +123,14 @@ export function ConfigPanel() {
                   <Search className="w-3 h-3" /> Search Strategy
                 </Label>
                 <Select 
-                  value={getSetting('pvp_search_strategy', 'normal')} 
+                  value={getSetting('pvp_search_strategy', 'none')} 
                   onValueChange={(value) => updateSetting('pvp_search_strategy', value)}
                 >
                   <SelectTrigger className="h-8 bg-background/50">
                     <SelectValue placeholder="Select strategy" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="normal">Normal Search</SelectItem>
+                    <SelectItem value="none">Normal Search</SelectItem>
                     <SelectItem value="17">Stronger or Equal Rivals</SelectItem>
                   </SelectContent>
                 </Select>
