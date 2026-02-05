@@ -137,10 +137,17 @@ export async function fetchMonstersGameData(
     pvpCooldown = secondsMatchStatus ? parseInt(secondsMatchStatus[1]) : 0;
 
     const isWorking = html.includes("trabajando") || html.includes("trabajas") || html.includes("cementerio");
-    const isBusy = isWorking || html.includes("misión") || html.includes("Gruta Ancestral");
+    const isInMission = html.includes("misión") || html.includes("Gruta Ancestral");
+    const isBusy = isWorking || isInMission;
 
     if (isBusy) {
-      logDebug(`[SYNC] Ritual active: ${isWorking ? 'WORKING' : 'BUSY'}. Cooldown: ${pvpCooldown}s`);
+      logDebug(`[SYNC] Ritual already active: ${isWorking ? 'WORKING' : 'ON_MISSION'}. Cooldown: ${pvpCooldown}s`);
+      const timeLeft = pvpCooldown > 0 ? `${Math.floor(pvpCooldown / 60)}m ${pvpCooldown % 60}s` : "unknown time";
+      logs.push({ 
+        type: 'INFO', 
+        message: `Shadow Vigil: Character is already engaged (${isWorking ? 'working at the graveyard' : 'on a mission'}). Resuming watch for ${timeLeft}.`, 
+        timestamp: new Date().toISOString() 
+      });
     }
 
     // --- STEP 2: AUTOMATION RITUALS ---
@@ -150,7 +157,7 @@ export async function fetchMonstersGameData(
           const hoursToWork = Math.min(12, Math.max(1, Math.ceil((maxStamina - stamina) / 20)));
           const workUrl = `https://${server}/index.php?ac=friedhof`;
           
-          logDebug(`[AUTOMATA] Energy critical (${stamina}/${maxStamina}). Starting job for ${hoursToWork}h.`);
+          logDebug(`[AUTOMATA] Energy critical (${stamina}/${maxStamina}). Initiating graveyard work for ${hoursToWork}h.`);
           
           const workPayload = new URLSearchParams({
             ac: 'friedhof',
@@ -175,7 +182,7 @@ export async function fetchMonstersGameData(
 
           logs.push({ 
             type: 'INFO', 
-            message: `Shadow Ritual: Energy low (${stamina}). Graveyard work triggered a ${Math.floor(pvpCooldown / 3600)}h restoration shift.`, 
+            message: `Shadow Ritual: Energy low (${stamina}). Graveyard work triggered for ${hoursToWork}h. Resting for ${Math.floor(pvpCooldown / 3600)}h.`, 
             timestamp: new Date().toISOString() 
           });
         }
@@ -195,7 +202,6 @@ export async function fetchMonstersGameData(
             logDebug(`[AUTOMATA] Manhunt limit reached. Switching to PvP...`);
             if (settings.pvp_attack) {
               const targetName = settings.pvp_target_name;
-              // Strategy 'none' maps to empty searchopt in the real game
               const strategyValue = settings.pvp_search_strategy === 'none' ? '' : (settings.pvp_search_strategy || '');
               
               const pvpSearchPayload = new URLSearchParams({
@@ -234,7 +240,6 @@ export async function fetchMonstersGameData(
                   const lootMatch = battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i);
                   const expMatch = battleHtml.match(/sumados (\d+) punto\(s\) de experiencia/i);
 
-                  // Extract new cooldown from battle result page
                   const secondsMatchBattle = battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
                   pvpCooldown = secondsMatchBattle ? parseInt(secondsMatchBattle[1]) : 900;
 
@@ -246,7 +251,7 @@ export async function fetchMonstersGameData(
                     
                     logs.push({ 
                       type: 'BATTLE', 
-                      message: `Shadow Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs [${opponentName}]. Loot: ${loot} gold, +${exp} XP. PvP Cooldown: ${Math.floor(pvpCooldown / 60)}m triggered.`, 
+                      message: `Shadow Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs [${opponentName}]. Loot: ${loot} gold, +${exp} XP. PvP Rest: ${Math.floor(pvpCooldown / 60)}m triggered.`, 
                       timestamp: new Date().toISOString() 
                     });
                   }
@@ -267,7 +272,7 @@ export async function fetchMonstersGameData(
             const secondsMatchM = mHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
             pvpCooldown = secondsMatchM ? parseInt(secondsMatchM[1]) : parseInt(duration) * 60;
             
-            logs.push({ type: 'MANHUNT', message: `Shadow Ritual: Manhunt sweep triggered a ${duration}m cooldown. XP and Gold incoming.`, timestamp: new Date().toISOString() });
+            logs.push({ type: 'MANHUNT', message: `Shadow Ritual: Manhunt started for ${duration}m. XP and Gold incoming.`, timestamp: new Date().toISOString() });
           }
         }
 
@@ -286,7 +291,7 @@ export async function fetchMonstersGameData(
               headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
               body: gPayload
             });
-            logs.push({ type: 'MISSION', message: `Shadow Ritual: Entering Ancestral Grotto (${settings.mission_difficulty || 'medium'}). Mission cooldown started.`, timestamp: new Date().toISOString() });
+            logs.push({ type: 'MISSION', message: `Shadow Ritual: Entering Ancestral Grotto (${settings.mission_difficulty || 'medium'}). Rest period started.`, timestamp: new Date().toISOString() });
           }
         }
       }
