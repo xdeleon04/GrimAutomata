@@ -79,7 +79,7 @@ export async function fetchMonstersGameData(
     const csrfMatch = preAuthHtml.match(/name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i);
     const csrfToken = csrfMatch ? csrfMatch[1] : '';
 
-    logDebug(`[DEBUG] Step 2: Posting Credentials`);
+    logDebug(`[DEBUG] Step 2: Posting Credentials to MoonID`);
     const loginPayload = new URLSearchParams({
       csrfmiddlewaretoken: csrfToken,
       username: username,
@@ -135,26 +135,29 @@ export async function fetchMonstersGameData(
     const html = await statusResponse.text();
 
     // Stats Extraction using flexible regex
+    // Level: <span class="char_level">Nivel 17</span>
     const levelMatch = html.match(/class=["']char_level["'][^>]*>(?:Nivel\s*)?(\d+)/i);
     const level = levelMatch ? parseInt(levelMatch[1]) : 0;
-    logDebug(`[DEBUG] Parsed Level: ${level}`);
+    logDebug(`[DEBUG] Level Match: ${levelMatch ? levelMatch[0] : 'FAILED'} -> ${level}`);
     
-    // Gold extraction from #goldbalance
+    // Gold: <span id="goldbalance">66.788,06</span>
     const goldMatch = html.match(/id=["']goldbalance["'][^>]*>([\d,.]+)</i);
     const gold = parseMGNumber(goldMatch ? goldMatch[1] : "0");
-    logDebug(`[DEBUG] Parsed Gold: ${gold}`);
+    logDebug(`[DEBUG] Gold Match: ${goldMatch ? goldMatch[0] : 'FAILED'} -> ${gold}`);
     
-    // Skill Average (Shadow Power)
+    // Skill Average: id="statbarSkillAverage">Promedio de Habilidad: 50,00</span>
     const skillAvgMatch = html.match(/id=["']statbarSkillAverage["'][^>]*>.*?(?:Promedio de Habilidad:)?\s*([\d,.]+)/i);
     const skillAverage = parseMGNumber(skillAvgMatch ? skillAvgMatch[1] : "0");
-    logDebug(`[DEBUG] Parsed Skill Average: ${skillAverage}`);
+    logDebug(`[DEBUG] Skill Average Match: ${skillAvgMatch ? skillAvgMatch[0] : 'FAILED'} -> ${skillAverage}`);
 
-    // Experience: (current|max) format
-    const expMatch = html.match(/Experiencia.*?\(\s*(\d+)\s*[|/]\s*(\d+)\s*\)/i);
+    // Experience: handles (1411|1445) or Experiencia: 1411 / 1445
+    const expMatch = html.match(/Experiencia.*?\(\s*(\d+)\s*[|/]\s*(\d+)\s*\)/i) || 
+                     html.match(/Experiencia:\s*(\d+)\s*[|/]\s*(\d+)/i);
     const experience = expMatch ? parseInt(expMatch[1]) : 0;
     const nextLevelExp = expMatch ? parseInt(expMatch[2]) : 100;
+    logDebug(`[DEBUG] XP Match: ${expMatch ? expMatch[0] : 'FAILED'} -> ${experience}/${nextLevelExp}`);
 
-    // Attributes
+    // Attributes (Spanish labels)
     const findStat = (label: string) => {
       const regex = new RegExp(`${label}:.*?\\(\\s*(\\d+)\\s*\\)`, 'si');
       const match = html.match(regex);
@@ -167,12 +170,13 @@ export async function fetchMonstersGameData(
     const con = findStat('Resistencia');
     const dex = findStat('Destreza');
 
-    // Stamina/Energy ratio extraction
+    // Stamina/Energy ratio extraction: Energía vital: (780|780)
     const staminaMatch = html.match(/Energía\s+vital:.*?\(\s*(\d+)\s*[|/]\s*(\d+)\s*\)/si) || 
+                         html.match(/Energía\s+vital:\s*(\d+)\s*[|/]\s*(\d+)/i) ||
                          html.match(/Energía\s+vital:\s*(\d+)/i);
     const stamina = staminaMatch ? parseInt(staminaMatch[1]) : 0;
     const maxStamina = (staminaMatch && staminaMatch[2]) ? parseInt(staminaMatch[2]) : 100;
-    logDebug(`[DEBUG] Parsed Stamina: ${stamina}/${maxStamina}`);
+    logDebug(`[DEBUG] Stamina Match: ${staminaMatch ? staminaMatch[0] : 'FAILED'} -> ${stamina}/${maxStamina}`);
 
     const race: 'Vampire' | 'Werewolf' = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
     
