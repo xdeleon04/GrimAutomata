@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { Power, Play, Square, Activity, ShieldAlert, Swords, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useUser, useFirestore, useDoc, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
+import { useUser, useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { doc, collection, serverTimestamp } from 'firebase/firestore';
 import { syncMoonId } from '@/ai/flows/moon-id-sync-flow';
 
@@ -51,15 +51,19 @@ export function StatusHeader() {
 
       const logsRef = collection(db, 'users', user.uid, 'activityLogs');
       result.logs.forEach(log => {
-        addDocumentNonBlocking(logsRef, {
+        // Generate a new document reference to get a random ID
+        const newLogRef = doc(logsRef);
+        // Use setDocumentNonBlocking to ensure the 'id' field matches the doc ID as per security rules
+        setDocumentNonBlocking(newLogRef, {
+          id: newLogRef.id,
           userId: user.uid,
           timestamp: new Date().toISOString(),
           logMessage: log.message,
           logLevel: log.type.toUpperCase(),
-        });
+        }, { merge: true });
       });
     } catch (error) {
-      console.error("Sync failed", error);
+      // Errors are handled by the global error listener
     } finally {
       setIsSyncing(false);
     }
