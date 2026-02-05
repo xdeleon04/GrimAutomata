@@ -151,15 +151,15 @@ export async function fetchMonstersGameData(
                             || huntHtml.match(/Puedes volver a atacar en/i);
       const counterMatch = huntHtml.match(/id=["']COUNTER["'][^>]*>([\d:]+)</i);
 
-      if (pvpCooldownMsg && counterMatch) {
-        logDebug(`[AUTOMATA] PvP Cooldown detected: ${counterMatch[1]}`);
+      if (counterMatch) {
+        logDebug(`[AUTOMATA] PvP Cooldown active: ${counterMatch[1]}`);
         logs.push({ 
           type: 'INFO', 
           message: `Shadow Ritual: Resting in shadows. PvP cooldown active (${counterMatch[1]} remaining).`, 
           timestamp: new Date().toISOString() 
         });
       } else if (humanHuntExhausted) {
-        logDebug(`[AUTOMATA] Human hunt limit reached for the current moon cycle.`);
+        logDebug(`[AUTOMATA] Human hunt limit reached.`);
         logs.push({ 
           type: 'INFO', 
           message: `Shadow Ritual: Human hunting limit reached. Switching to rival tracking.`, 
@@ -187,11 +187,14 @@ export async function fetchMonstersGameData(
           
           if (huntResultHtml.includes("successful") || huntResultHtml.includes("Exitoso")) {
             const gegnerIdMatch = huntResultHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
+            const opponentNameMatch = huntResultHtml.match(/tracked down the (?:Hombre Lobo|Vampiro|Adversario)\s+([^ ]+)\s+and/i);
+            const opponentName = opponentNameMatch ? opponentNameMatch[1] : (targetName || "Unknown Rival");
+
             if (gegnerIdMatch) {
-              logDebug(`[AUTOMATA] Target found! GegnerID: ${gegnerIdMatch[1]}. Launching asalto...`);
+              logDebug(`[AUTOMATA] Target [${opponentName}] found! GegnerID: ${gegnerIdMatch[1]}. Launching asalto...`);
               logs.push({ 
                 type: 'INFO', 
-                message: `Shadow Ritual: Target found! Launching asalto against the rival.`, 
+                message: `Shadow Ritual: Target [${opponentName}] found! Launching asalto against the rival.`, 
                 timestamp: new Date().toISOString() 
               });
               
@@ -220,7 +223,7 @@ export async function fetchMonstersGameData(
                 
                 logs.push({ 
                   type: 'BATTLE', 
-                  message: `Shadow Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} against rival. Loot: ${loot} gold. Exp: +${exp}.`, 
+                  message: `Shadow Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} against [${opponentName}]. Loot: ${loot} gold. Exp: +${exp}.`, 
                   timestamp: new Date().toISOString() 
                 });
               } else {
@@ -232,7 +235,7 @@ export async function fetchMonstersGameData(
             logDebug(`[AUTOMATA] Search in vain.`);
             logs.push({ 
               type: 'INFO', 
-              message: `Shadow Ritual: Scanned for ${targetName ? targetName : 'Werewolves'} in vain. The area is quiet.`, 
+              message: `Shadow Ritual: Scanned for ${targetName ? targetName : 'rivals'} in vain. The area is quiet.`, 
               timestamp: new Date().toISOString() 
             });
           }
