@@ -33,6 +33,7 @@ export function QuickStats() {
     level: userData?.level ?? 0,
     gold: userData?.gold ?? 0,
     stamina: userData?.stamina ?? 0,
+    maxStamina: userData?.maxStamina ?? 100,
     experience: userData?.experience ?? 0,
     nextLevelExp: userData?.nextLevelExp ?? 100,
     attributes: {
@@ -45,6 +46,7 @@ export function QuickStats() {
   };
 
   const xpProgress = stats.nextLevelExp > 0 ? (stats.experience / stats.nextLevelExp) * 100 : 0;
+  const staminaProgress = stats.maxStamina > 0 ? (stats.stamina / stats.maxStamina) * 100 : 0;
 
   return (
     <div className="space-y-4">
@@ -63,9 +65,9 @@ export function QuickStats() {
         />
         <StatCard 
           label="Stamina" 
-          value={`${stats.stamina} / 100`} 
+          value={`${stats.stamina} / ${stats.maxStamina}`} 
           icon={<Zap className="text-accent w-4 h-4" />} 
-          progress={stats.stamina}
+          progress={staminaProgress}
         />
         <StatCard 
           label="Shadow Power" 

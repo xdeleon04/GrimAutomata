@@ -146,6 +146,10 @@
           "type": "number",
           "description": "Current stamina points."
         },
+        "maxStamina": {
+          "type": "number",
+          "description": "Maximum stamina points."
+        },
         "experience": {
           "type": "number",
           "description": "Current experience points."

@@ -1,3 +1,4 @@
+
 /**
  * @fileOverview Service for interacting with MonstersGame via MoonID.
  * Handles authentication, cookie persistence, and HTML scraping from the game realm.
@@ -14,6 +15,7 @@ export interface MonstersGameStats {
     level: number;
     gold: number;
     stamina: number;
+    maxStamina: number;
     experience: number;
     nextLevelExp: number;
     attributes: {
@@ -200,9 +202,11 @@ export async function fetchMonstersGameData(
     const con = findStat('Resistencia');
     const dex = findStat('Destreza');
 
-    // 5. Vital Energy (Stamina)
-    const rawStamina = extractValue(/Energía\s+vital:.*?\((\d+)[|/]/si, html);
-    const stamina = rawStamina ? parseInt(rawStamina) : 100;
+    // 5. Vital Energy (Stamina) - Capturing current and max
+    const staminaMatch = html.match(/Energía\s+vital:.*?\((\d+)[|/](\d+)\)/si);
+    const stamina = staminaMatch ? parseInt(staminaMatch[1]) : 100;
+    const maxStamina = staminaMatch ? parseInt(staminaMatch[2]) : 100;
+    logDebug(`[DEBUG] Vital Energy Sync: ${stamina} / ${maxStamina}`);
 
     // Determine Race
     const race: 'Vampire' | 'Werewolf' = (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf';
@@ -240,6 +244,7 @@ export async function fetchMonstersGameData(
         level,
         gold,
         stamina,
+        maxStamina,
         experience,
         nextLevelExp,
         attributes: {
@@ -256,7 +261,7 @@ export async function fetchMonstersGameData(
     console.error('MonstersGame Service Ritual Failure:', error);
     return {
       race: 'Vampire',
-      stats: { level: 0, gold: 0, stamina: 0, experience: 0, nextLevelExp: 0, attributes: { strength: 0, defense: 0, dexterity: 0, agility: 0, constitution: 0 } },
+      stats: { level: 0, gold: 0, stamina: 0, maxStamina: 100, experience: 0, nextLevelExp: 0, attributes: { strength: 0, defense: 0, dexterity: 0, agility: 0, constitution: 0 } },
       logs: [{
         type: 'ERROR',
         message: `Ritual failed: ${error.message}`,

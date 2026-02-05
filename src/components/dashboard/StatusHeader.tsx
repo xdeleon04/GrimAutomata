@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useEffect } from 'react';
@@ -63,6 +64,7 @@ export function StatusHeader() {
         level: result.stats.level,
         gold: result.stats.gold,
         stamina: result.stats.stamina,
+        maxStamina: result.stats.maxStamina,
         experience: result.stats.experience,
         nextLevelExp: result.stats.nextLevelExp,
         attributes: result.stats.attributes,
