@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Service for interacting with MonstersGame via MoonID.
@@ -137,19 +138,16 @@ export async function fetchMonstersGameData(
     if (!isBusy) {
       if (stamina <= staminaReserve) {
         if (settings.auto_work !== false) {
-          // Calculation: Assuming 10-20 stamina/hr restoration depending on premium/buffs, 
-          // we aim for 8 hours if very low, or less if closer to threshold.
-          const hoursToWork = Math.min(8, Math.max(1, Math.ceil((maxStamina - stamina) / 30)));
-          const sacValue = race === 'Vampire' ? 'vampir' : 'wolf';
+          // Recovery estimation: Roughly 20 stamina per hour. Min 1h, max 12h.
+          const hoursToWork = Math.min(12, Math.max(1, Math.ceil((maxStamina - stamina) / 20)));
           const workUrl = `https://${server}/index.php?ac=friedhof`;
           
-          logDebug(`[AUTOMATA] Energy depleted. Initiating graveyard ritual for ${hoursToWork} hours...`);
+          logDebug(`[AUTOMATA] Energy critical (${stamina}/${maxStamina}). Initiating graveyard shift for ${hoursToWork} hours...`);
           
           const workPayload = new URLSearchParams({
             ac: 'friedhof',
-            sac: sacValue,
-            duration: hoursToWork.toString(),
-            search: 'Empezar a trabajar'
+            sac: 'startjob',
+            arbeitszeit: hoursToWork.toString()
           });
 
           await fetch(workUrl, {
@@ -181,7 +179,7 @@ export async function fetchMonstersGameData(
         const huntPageRes = await fetch(huntPageUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
         const huntHtml = await huntPageRes.text();
 
-        // Check for cooldown script timer
+        // Detect cooldown via Javascript variable SecondsCOUNTER
         const secondsMatch = huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
         const secondsRemaining = secondsMatch ? parseInt(secondsMatch[1]) : 0;
         
@@ -196,6 +194,7 @@ export async function fetchMonstersGameData(
             message: `Shadow Ritual: Resting in shadows. PvP cooldown active (${cooldownDisplay}).`, 
             timestamp: new Date().toISOString() 
           });
+          logDebug(`[AUTOMATA] Cooldown scan: ${cooldownDisplay} (${secondsRemaining}s)`);
         } else {
           const humanLimitReached = huntHtml.includes("used all of today's hunting time") || huntHtml.includes("ya has usado todo tu tiempo de caza");
           
@@ -203,16 +202,17 @@ export async function fetchMonstersGameData(
             logDebug(`[AUTOMATA] Manhunt limit reached. Attempting PvP...`);
             if (settings.pvp_attack) {
               const targetName = settings.pvp_target_name;
-              const strategy = settings.pvp_search_strategy === 'none' ? '' : (settings.pvp_search_strategy || '');
+              // Strategy 'none' maps to empty string for normal search
+              const strategyValue = settings.pvp_search_strategy === 'none' ? '' : (settings.pvp_search_strategy || '');
               
               const pvpSearchPayload = new URLSearchParams({
                 ac: 'raubzug',
                 sac: 'gegner',
                 searchname: targetName || '',
-                searchopt: strategy,
+                searchopt: strategyValue,
               });
 
-              logDebug(`[AUTOMATA] Searching district for [${targetName || 'random rivals'}] with strategy [${strategy}]...`);
+              logDebug(`[AUTOMATA] District search: Target=[${targetName || 'random'}] Strategy=[${strategyValue}]`);
               const pvpSearchRes = await fetch(huntPageUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
@@ -228,8 +228,7 @@ export async function fetchMonstersGameData(
                 const opponentName = opponentNameMatch ? opponentNameMatch[1].trim() : (targetName || "Unknown Rival");
 
                 if (gegnerIdMatch) {
-                  logDebug(`[AUTOMATA] Opponent found: ${opponentName}. Executing Asalto...`);
-                  logs.push({ type: 'INFO', message: `Shadow Ritual: Opponent [${opponentName}] located! Initiating combat...`, timestamp: new Date().toISOString() });
+                  logDebug(`[AUTOMATA] Ritual target [${opponentName}] ID [${gegnerIdMatch[1]}] found. Attacking...`);
                   
                   const attackPayload = new URLSearchParams({ ac: 'raubzug', sac: 'attack', gegnerid: gegnerIdMatch[1] });
                   const battleRes = await fetch(huntPageUrl, {
@@ -258,7 +257,7 @@ export async function fetchMonstersGameData(
                   }
                 }
               } else if (searchHtml.includes("in vain") || searchHtml.includes("en vano")) {
-                logDebug(`[AUTOMATA] PvP search failed: IN_VAIN.`);
+                logDebug(`[AUTOMATA] PvP search: District empty (IN_VAIN).`);
                 logs.push({ type: 'INFO', message: `Shadow Ritual: Scanned the district for rivals in vain.`, timestamp: new Date().toISOString() });
               }
             }
