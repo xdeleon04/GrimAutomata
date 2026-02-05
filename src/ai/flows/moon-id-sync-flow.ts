@@ -1,8 +1,8 @@
 'use server';
 /**
- * @fileOverview A flow to fetch real data from MonstersGame.
+ * @fileOverview A flow to fetch real data and execute automations in MonstersGame.
  * 
- * - syncMoonId - Orchestrates the retrieval of character stats and logs from the game server.
+ * - syncMoonId - Orchestrates the retrieval of character stats and execution of rituals.
  */
 
 import { ai } from '@/ai/genkit';
@@ -14,6 +14,7 @@ const MoonIdSyncInputSchema = z.object({
   password: z.string().optional(),
   server: z.string(),
   debug: z.boolean().optional(),
+  settings: z.record(z.any()).optional(),
 });
 export type MoonIdSyncInput = z.infer<typeof MoonIdSyncInputSchema>;
 
@@ -28,8 +29,10 @@ const MoonIdSyncOutputSchema = z.object({
     level: z.number(),
     gold: z.number(),
     stamina: z.number(),
+    maxStamina: z.number(),
     experience: z.number(),
     nextLevelExp: z.number(),
+    skillAverage: z.number(),
     attributes: z.object({
       strength: z.number(),
       defense: z.number(),
@@ -52,12 +55,13 @@ const moonIdSyncFlow = ai.defineFlow(
     outputSchema: MoonIdSyncOutputSchema,
   },
   async (input) => {
-    // We now bypass ai.generate and use the real game service
+    // Perform sync and automation execution
     const gameData = await fetchMonstersGameData(
       input.username, 
       input.password || '', 
       input.server,
-      input.debug
+      input.debug,
+      input.settings || {}
     );
     
     if (!gameData) {

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Power, Play, Square, Activity, ShieldAlert, Swords, Loader2, Bug, BugOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useUser, useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
+import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { doc, collection, serverTimestamp } from 'firebase/firestore';
 import { syncMoonId } from '@/ai/flows/moon-id-sync-flow';
 
@@ -26,14 +26,20 @@ export function StatusHeader() {
     return doc(db, 'users', user.uid);
   }, [db, user]);
 
+  const settingsQuery = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return collection(db, 'users', user.uid, 'automationSettings');
+  }, [db, user]);
+
   const { data: credentials } = useDoc(credentialRef);
+  const { data: settings } = useCollection(settingsQuery);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRunning) {
       interval = setInterval(() => {
         setUptime(prev => prev + 1);
-        // Periodic sync simulation every 60 seconds
+        // Periodic sync and action cycle every 60 seconds
         if (uptime > 0 && uptime % 60 === 0) {
           triggerSync();
         }
@@ -48,12 +54,24 @@ export function StatusHeader() {
     if (!user || !db || !credentials || !userDocRef) return;
     
     setIsSyncing(true);
+    
+    // Map Firestore settings to a plain object for the backend
+    const config: Record<string, any> = {};
+    settings?.forEach(s => {
+      try {
+        config[s.settingName] = JSON.parse(s.settingValue);
+      } catch {
+        config[s.settingName] = s.settingValue;
+      }
+    });
+
     try {
       const result = await syncMoonId({
         username: credentials.moonIdUsername,
         password: credentials.encryptedMoonIdPassword,
         server: credentials.description || 'es1.monstersgame.moonid.net',
-        debug: debugMode
+        debug: debugMode,
+        settings: config
       });
 
       // Update character stats in Firestore
@@ -84,7 +102,7 @@ export function StatusHeader() {
         }, { merge: true });
       });
     } catch (error) {
-      // Errors are handled by the global error listener
+      // Global error listener catches these
     } finally {
       setIsSyncing(false);
     }
@@ -124,7 +142,7 @@ export function StatusHeader() {
           {isSyncing && (
             <div className="flex items-center gap-2 text-accent">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Scanning Realm...</span>
+              <span>Shadowing Realm...</span>
             </div>
           )}
           <Button
@@ -141,7 +159,7 @@ export function StatusHeader() {
           </Button>
           <div className="flex items-center gap-2">
             <Swords className="w-4 h-4 text-accent" />
-            <span className="text-muted-foreground">Real-time Sync</span>
+            <span className="text-muted-foreground">Ritual Sync</span>
           </div>
         </div>
         
