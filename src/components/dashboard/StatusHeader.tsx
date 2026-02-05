@@ -19,6 +19,8 @@ export function StatusHeader() {
   const [cooldown, setCooldown] = useState(0);
   
   const lastSyncRef = useRef<number>(0);
+  const isSyncingRef = useRef<boolean>(false);
+  const cooldownRef = useRef<number>(0);
 
   const credentialRef = useMemoFirebase(() => {
     if (!db || !user) return null;
@@ -39,8 +41,9 @@ export function StatusHeader() {
   const { data: settings } = useCollection(settingsQuery);
 
   const triggerSync = useCallback(async () => {
-    if (!user || !db || !credentials || !userDocRef || isSyncing) return;
+    if (!user || !db || !credentials || !userDocRef || isSyncingRef.current) return;
     
+    isSyncingRef.current = true;
     setIsSyncing(true);
     lastSyncRef.current = Date.now();
     
@@ -62,6 +65,7 @@ export function StatusHeader() {
         settings: config
       });
 
+      cooldownRef.current = result.pvpCooldown;
       setCooldown(result.pvpCooldown);
 
       const updateData: any = {
@@ -92,38 +96,45 @@ export function StatusHeader() {
         }, { merge: true });
       });
 
-      // If we performed a ritual action, we might want to sync again SOON
-      // but only if we aren't now in cooldown.
+      // If we performed an action and aren't in cooldown, we might want another sync soon
       const performedAction = result.logs.some(l => 
         l.type === 'BATTLE' || l.type === 'MANHUNT' || l.type === 'MISSION'
       );
       
       if (performedAction && result.pvpCooldown === 0) {
-        setTimeout(() => triggerSync(), 5000);
+        // Schedule a follow-up sync if we just did something and no cooldown appeared
+        setTimeout(() => {
+          if (isRunning) triggerSync();
+        }, 5000);
       }
 
     } catch (error) {
       // Handled by FirebaseErrorListener
     } finally {
+      isSyncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [user, db, credentials, userDocRef, isSyncing, settings, debugMode]);
+  }, [user, db, credentials, userDocRef, settings, debugMode, isRunning]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRunning) {
+      // Reset refs on start
+      lastSyncRef.current = 0; 
+      
       interval = setInterval(() => {
         setUptime(prev => prev + 1);
         
         // Count down the cooldown in real-time
-        let nextCooldownValue = 0;
+        let currentCooldown = 0;
         setCooldown(prev => {
-          nextCooldownValue = Math.max(0, prev - 1);
-          return nextCooldownValue;
+          currentCooldown = Math.max(0, prev - 1);
+          cooldownRef.current = currentCooldown;
+          return currentCooldown;
         });
         
         const now = Date.now();
-        const secondsSinceLastSync = (now - lastSyncRef.current) / 1000;
+        const secondsSinceLastSync = lastSyncRef.current === 0 ? Infinity : (now - lastSyncRef.current) / 1000;
         
         /**
          * SMART SYNC LOGIC:
@@ -131,20 +142,24 @@ export function StatusHeader() {
          * 2. If no cooldown is active: Sync every 60 seconds (heartbeat for stamina/stats).
          * 3. Safety fallback: Sync every 5 minutes regardless of cooldown.
          */
-        const justFinishedCooldown = cooldown > 0 && nextCooldownValue === 0;
-        const regularHeartbeat = cooldown === 0 && secondsSinceLastSync >= 60;
-        const safetyHeartbeat = secondsSinceLastSync >= 300;
+        const justFinishedCooldown = cooldownRef.current === 0 && secondsSinceLastSync > 1 && secondsSinceLastSync < 60 && lastSyncRef.current !== 0; 
+        // Note: cooldownRef.current is updated by the setCooldown functional update above
+        
+        const regularHeartbeat = cooldownRef.current === 0 && secondsSinceLastSync >= 60;
+        const initialSync = lastSyncRef.current === 0;
 
-        if ((justFinishedCooldown || regularHeartbeat || safetyHeartbeat) && !isSyncing) {
+        if ((initialSync || justFinishedCooldown || regularHeartbeat) && !isSyncingRef.current) {
           triggerSync();
         }
       }, 1000);
     } else {
       setUptime(0);
       setCooldown(0);
+      cooldownRef.current = 0;
+      lastSyncRef.current = 0;
     }
     return () => clearInterval(interval);
-  }, [isRunning, cooldown, isSyncing, triggerSync]);
+  }, [isRunning, triggerSync]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -154,10 +169,6 @@ export function StatusHeader() {
   };
 
   const handleToggle = () => {
-    if (!isRunning && credentials) {
-      // Trigger initial sync when starting
-      setTimeout(() => triggerSync(), 100);
-    }
     setIsRunning(!isRunning);
   };
 
