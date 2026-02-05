@@ -16,15 +16,24 @@ const MoonIdSyncInputSchema = z.object({
 export type MoonIdSyncInput = z.infer<typeof MoonIdSyncInputSchema>;
 
 const MoonIdSyncOutputSchema = z.object({
+  race: z.enum(['Vampire', 'Werewolf']),
   logs: z.array(z.object({
-    type: z.enum(['info', 'battle', 'training', 'loot', 'error']),
+    type: z.enum(['info', 'battle', 'training', 'loot', 'error', 'manhunt']),
     message: z.string(),
   })),
   stats: z.object({
     level: z.number(),
     gold: z.number(),
     stamina: z.number(),
-    power: z.number(),
+    experience: z.number(),
+    nextLevelExp: z.number(),
+    attributes: z.object({
+      strength: z.number(),
+      defense: z.number(),
+      dexterity: z.number(),
+      agility: z.number(),
+      constitution: z.number(),
+    }),
   }),
 });
 export type MoonIdSyncOutput = z.infer<typeof MoonIdSyncOutputSchema>;
@@ -41,17 +50,26 @@ const moonIdSyncFlow = ai.defineFlow(
   },
   async (input) => {
     const { output } = await ai.generate({
-      prompt: `You are the GrimAutomata engine core. 
-      Simulate an automated status check and progression sync for the user "${input.username}" on the MonstersGame server "${input.server}".
-      The user is currently connected via MoonID connect (API 83).
+      prompt: `You are the GrimAutomata engine core, a high-performance bot for MonstersGame. 
+      Simulate a character synchronization for user "${input.username}" on server "${input.server}".
       
-      Generate a realistic set of 3-5 activity logs reflecting actions like hunting, training, or managing equipment.
-      Generate current character stats (Level 40-60, Gold 500k-2M, Stamina 0-100, Power 5000-15000).
+      MonstersGame is a browser MMORPG about Vampires vs. Werewolves.
       
-      Tone requirements:
-      - Gothic, dark, and professional.
-      - Use terms like "Sanctuary", "Blood Gold", "Manhunt", "Grotto".
-      - Refer to the server "${input.server}" as the "Active Realm".`,
+      Generate a realistic character state:
+      1. Pick a Race: Vampire or Werewolf.
+      2. Generate 4-6 Activity Logs reflecting:
+         - A "Manhunt" (hunting humans for gold).
+         - An "Ancestral Grotto" mission (PvE quest).
+         - A "Training" session (increasing a specific attribute).
+         - A "Battle" against the opposite race.
+      3. Generate stats:
+         - Level: 30-70.
+         - Gold: 100k - 5M.
+         - Stamina: 0-100.
+         - Attributes: Strength, Defense, Dexterity, Agility, Constitution (all 100-500).
+      
+      Tone: Gothic, dark, and technical. Use terms like "Bite", "Howl", "Shadow Realm", "Manhunt duration", "Slayer".
+      Server context: "${input.server}" is the target realm.`,
       output: { schema: MoonIdSyncOutputSchema },
     });
 
