@@ -31,15 +31,13 @@ export interface MonstersGameStats {
 
 /**
  * Normalizes European number formatting (e.g., 66.876,06 -> 66876.06)
- * In MonstersGame ES, '.' is often the thousands separator and ',' is the decimal.
  */
 function parseMGNumber(str: string | null): number {
   if (!str) return 0;
-  // Remove thousands separator (.) and replace decimal separator (,) with (.)
   const normalized = str.trim()
-    .replace(/\s/g, '') // Remove any spaces
-    .replace(/\./g, '') // Remove dots (thousands)
-    .replace(',', '.');  // Convert comma to dot (decimal)
+    .replace(/\s/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
   return parseFloat(normalized) || 0;
 }
 
@@ -76,7 +74,6 @@ export async function fetchMonstersGameData(
 
     logDebug(`[AUTH] Initiating MoonID authentication ritual for [${username}]...`);
     
-    // 1. Visit Login Page to get CSRF
     const preAuthResponse = await fetch('https://moonid.net/account/login/', {
       headers: { 'User-Agent': userAgent }
     });
@@ -84,9 +81,8 @@ export async function fetchMonstersGameData(
     const preAuthHtml = await preAuthResponse.text();
     const csrfMatch = preAuthHtml.match(/name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i);
     const csrfToken = csrfMatch ? csrfMatch[1] : '';
-    logDebug(`[AUTH] CSRF Token detected: ${csrfToken ? 'YES' : 'NO'}`);
+    logDebug(`[AUTH] CSRF detected: ${csrfToken ? 'OK' : 'MISSING'}`);
 
-    // 2. Perform Login
     const loginPayload = new URLSearchParams({
       csrfmiddlewaretoken: csrfToken,
       username: username,
@@ -107,13 +103,12 @@ export async function fetchMonstersGameData(
       redirect: 'manual'
     });
     updateCookies(loginResponse.headers.getSetCookie());
-    logDebug(`[AUTH] Login submitted. Status: ${loginResponse.status}`);
+    logDebug(`[AUTH] Response Status: ${loginResponse.status}`);
 
-    // 3. Handle Redirect Chain
     let currentUrl = loginResponse.headers.get('Location');
     while (currentUrl) {
       if (currentUrl.startsWith('/')) currentUrl = 'https://moonid.net' + currentUrl;
-      logDebug(`[AUTH] Following redirect: ${currentUrl}`);
+      logDebug(`[AUTH] Redirecting to: ${currentUrl}`);
       const res = await fetch(currentUrl, {
         headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent },
         redirect: 'manual'
@@ -124,13 +119,12 @@ export async function fetchMonstersGameData(
 
     // --- STEP 1: INITIAL SYNC ---
     const statusUrl = `https://${server}/index.php?ac=status`;
-    logDebug(`[SYNC] Fetching realm status from ${statusUrl}`);
+    logDebug(`[SYNC] Reading scrolls from ${statusUrl}`);
     let statusResponse = await fetch(statusUrl, {
       headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent }
     });
     let html = await statusResponse.text();
 
-    // Basic State Detection
     const staminaMatch = html.match(/Energía\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/si)
                        || html.match(/Energía\s+vital:\s*([\d,.]+)/i);
     const stamina = parseMGNumber(staminaMatch ? staminaMatch[1] : "0");
@@ -138,37 +132,37 @@ export async function fetchMonstersGameData(
     const staminaReserve = parseInt(settings.stamina_reserve || '5');
 
     const isBusy = html.includes("trabajando") || html.includes("misión") || html.includes("Gruta Ancestral");
-
-    logDebug(`[SYNC] Stamina: ${stamina}/${maxStamina}, Reserve: ${staminaReserve}, Busy: ${isBusy}`);
+    logDebug(`[SYNC] Stamina: ${stamina}/${maxStamina} | Busy: ${isBusy}`);
 
     // --- STEP 2: AUTOMATION RITUALS ---
     if (!isBusy && stamina > staminaReserve) {
       const huntPageUrl = `https://${server}/index.php?ac=raubzug`;
-      logDebug(`[AUTOMATA] Inspecting hunting grounds: ${huntPageUrl}`);
+      logDebug(`[AUTOMATA] Accessing hunting grounds: ${huntPageUrl}`);
       const huntPageRes = await fetch(huntPageUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
       const huntHtml = await huntPageRes.text();
 
-      // Robust Cooldown Detection
-      const counterMatch = huntHtml.match(/id=["']COUNTER["'][^>]*>([\d:]+)</i);
-      logDebug(`[AUTOMATA] Cooldown scan result: ${counterMatch ? counterMatch[1] : 'NONE'}`);
+      // Broad Cooldown Detection: Look for id="COUNTER" or the 15m message
+      const counterMatch = huntHtml.match(/id\s*=\s*["']COUNTER["'][^>]*>\s*([\d:]+)\s*</i);
+      logDebug(`[AUTOMATA] Cooldown Scan: ${counterMatch ? counterMatch[1] : 'NOT_FOUND'}`);
 
-      if (counterMatch) {
-        const cooldownRemaining = counterMatch[1];
+      if (counterMatch || huntHtml.includes("every 15 minutes") || huntHtml.includes("cada 15 minutos")) {
+        const cooldownRemaining = counterMatch ? counterMatch[1] : 'ACTIVE';
         logs.push({ 
           type: 'INFO', 
-          message: `Shadow Ritual: Resting in shadows. PvP cooldown active (${cooldownRemaining} remaining).`, 
+          message: `Shadow Ritual: Resting in shadows. PvP cooldown ${cooldownRemaining !== 'ACTIVE' ? `(${cooldownRemaining})` : 'is active'}.`, 
           timestamp: new Date().toISOString() 
         });
+        logDebug(`[AUTOMATA] PvP blocked by cooldown.`);
       } else {
-        const humanHuntExhausted = huntHtml.includes("used all of today's hunting time") || huntHtml.includes("ya has usado todo tu tiempo de caza");
-        logDebug(`[AUTOMATA] Human limit reached: ${humanHuntExhausted}`);
+        const humanLimitReached = huntHtml.includes("used all of today's hunting time") || huntHtml.includes("ya has usado todo tu tiempo de caza");
+        logDebug(`[AUTOMATA] Daily Human Hunt Limit: ${humanLimitReached ? 'REACHED' : 'AVAILABLE'}`);
         
-        if (humanHuntExhausted) {
+        if (humanLimitReached) {
           if (settings.pvp_attack) {
             const targetName = settings.pvp_target_name;
-            const strategy = settings.pvp_search_strategy === 'none' || !settings.pvp_search_strategy ? '' : settings.pvp_search_strategy;
+            const strategy = settings.pvp_search_strategy === 'none' ? '' : (settings.pvp_search_strategy || '');
             
-            logDebug(`[AUTOMATA] Initiating PVP track: Target=[${targetName || 'RANDOM'}], Strategy=[${strategy || 'NORMAL'}]`);
+            logDebug(`[AUTOMATA] PvP Tracking: Target=[${targetName || 'RANDOM'}] | Strategy=[${strategy || 'NORMAL'}]`);
             
             const pvpSearchPayload = new URLSearchParams({
               ac: 'raubzug',
@@ -183,17 +177,17 @@ export async function fetchMonstersGameData(
               body: pvpSearchPayload
             });
             
-            const huntResultHtml = await pvpSearchRes.text();
+            const searchHtml = await pvpSearchRes.text();
             
-            if (huntResultHtml.includes("successful") || huntResultHtml.includes("Exitoso")) {
-              const gegnerIdMatch = huntResultHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
-              const opponentNameMatch = huntResultHtml.match(/tracked down the (?:Hombre Lobo|Vampiro|Adversario|Hombre-Lobo)\s+([^ ]+)\s+and/i)
-                                     || huntResultHtml.match(/<div class=["']headerRow["'][^>]*>(?:Hombre Lobo|Vampiro)\s+(.*?)<\/div>/i);
+            if (searchHtml.includes("successful") || searchHtml.includes("Exitoso")) {
+              const gegnerIdMatch = searchHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
+              const opponentNameMatch = searchHtml.match(/tracked down the (?:Hombre Lobo|Vampiro|Adversario|Hombre-Lobo|Hombre\s+Lobo)\s+([^ ]+)\s+and/i)
+                                     || searchHtml.match(/<div class=["']headerRow["'][^>]*>(?:Hombre Lobo|Vampiro)\s+(.*?)<\/div>/i);
               const opponentName = opponentNameMatch ? opponentNameMatch[1].trim() : (targetName || "Unknown Rival");
 
               if (gegnerIdMatch) {
-                logDebug(`[AUTOMATA] Rival [${opponentName}] found! ID: ${gegnerIdMatch[1]}. Invoking asalto...`);
-                logs.push({ type: 'INFO', message: `Shadow Ritual: Rival [${opponentName}] tracked! Commencing asalto...`, timestamp: new Date().toISOString() });
+                logDebug(`[AUTOMATA] Rival [${opponentName}] located. Executing Asalto...`);
+                logs.push({ type: 'INFO', message: `Shadow Ritual: Rival [${opponentName}] tracked! Initiating combat...`, timestamp: new Date().toISOString() });
                 
                 const attackPayload = new URLSearchParams({ ac: 'raubzug', sac: 'attack', gegnerid: gegnerIdMatch[1] });
                 const battleRes = await fetch(huntPageUrl, {
@@ -204,31 +198,31 @@ export async function fetchMonstersGameData(
                 
                 const battleHtml = await battleRes.text();
                 const winnerMatch = battleHtml.match(/class=["']headerRowCWinner["'][^>]*>(?:Vencedor\/a:\s*)?(.*?)<\/div>/i)
-                                  || battleHtml.match(/<td colspan=["']3["'] class=["']tdh["']>Vencedor\/a:\s*(.*?)<\/td>/i);
+                                  || battleHtml.match(/Vencedor\/a:\s*([^<]+)/i);
                 const lootMatch = battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i);
-                const battleExpMatch = battleHtml.match(/han sido sumados (\d+) punto\(s\) de experiencia/i);
+                const expMatch = battleHtml.match(/sumados (\d+) punto\(s\) de experiencia/i);
 
                 if (winnerMatch) {
                   const winnerName = winnerMatch[1].trim();
                   const isWinner = winnerName === username || winnerName.includes(username);
                   const loot = lootMatch ? lootMatch[1] : '0';
-                  const exp = battleExpMatch ? battleExpMatch[1] : '0';
+                  const exp = expMatch ? expMatch[1] : '0';
                   
                   logs.push({ 
                     type: 'BATTLE', 
-                    message: `Shadow Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} against [${opponentName}]. Loot: ${loot} gold. Exp: +${exp}.`, 
+                    message: `Shadow Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} against [${opponentName}]. Spoils: ${loot} gold, +${exp} XP.`, 
                     timestamp: new Date().toISOString() 
                   });
                 }
               }
-            } else {
-              logDebug(`[AUTOMATA] Rival search failed or area quiet.`);
-              logs.push({ type: 'INFO', message: `Shadow Ritual: Scanned for rivals in vain. The district is quiet.`, timestamp: new Date().toISOString() });
+            } else if (searchHtml.includes("in vain") || searchHtml.includes("en vano")) {
+              logDebug(`[AUTOMATA] Search result: IN_VAIN.`);
+              logs.push({ type: 'INFO', message: `Shadow Ritual: Scanned district for [${targetName || 'Werewolves'}] in vain.`, timestamp: new Date().toISOString() });
             }
           }
         } else if (settings.auto_manhunt) {
           const duration = settings.manhunt_duration || '60';
-          logDebug(`[AUTOMATA] Launching Manhunt: Duration=${duration}m`);
+          logDebug(`[AUTOMATA] Initiating Manhunt: ${duration}m`);
           const mPayload = new URLSearchParams({ ac: 'raubzug', sac: 'vampir', duration: duration, search: 'Empezar la búsqueda' });
           await fetch(huntPageUrl, {
             method: 'POST',
@@ -239,26 +233,26 @@ export async function fetchMonstersGameData(
         }
       }
 
-      // 2.2 Grotto Fallback
-      if (settings.auto_grotto && !logs.some(l => l.type === 'MANHUNT' || l.type === 'BATTLE' || l.message.includes('cooldown'))) {
+      // Grotto Fallback if PvP/Manhunt didn't occur
+      if (settings.auto_grotto && !logs.some(l => l.type === 'MANHUNT' || l.type === 'BATTLE')) {
         const grottoUrl = `https://${server}/index.php?ac=ahnenstaette`;
-        const grottoCheck = await fetch(grottoUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
-        const grottoHtml = await grottoCheck.text();
+        const gCheck = await fetch(grottoUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
+        const gHtml = await gCheck.text();
 
-        if (!grottoHtml.includes("ya estás") && !grottoHtml.includes("misión")) {
-          logDebug(`[AUTOMATA] Entering Grotto...`);
-          const diffIndex = { 'easy': '0', 'medium': '1', 'hard': '2' }[settings.mission_difficulty || 'medium'] || '1';
-          const gPayload = new URLSearchParams({ 'mision': 'true', 'schwierigkeit': diffIndex, 'go': 'Aceptar' });
+        if (!gHtml.includes("ya estás") && !gHtml.includes("misión")) {
+          logDebug(`[AUTOMATA] Entering Ancestral Grotto...`);
+          const diffMap = { 'easy': '0', 'medium': '1', 'hard': '2' };
+          const diffVal = (diffMap as any)[settings.mission_difficulty || 'medium'] || '1';
+          const gPayload = new URLSearchParams({ 'mision': 'true', 'schwierigkeit': diffVal, 'go': 'Aceptar' });
           await fetch(grottoUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
             body: gPayload
           });
-          logs.push({ type: 'MISSION', message: `Shadow Ritual: Entered Ancestral Grotto (${settings.mission_difficulty || 'medium'}).`, timestamp: new Date().toISOString() });
+          logs.push({ type: 'MISSION', message: `Shadow Ritual: Entering Grotto on ${settings.mission_difficulty || 'medium'} difficulty.`, timestamp: new Date().toISOString() });
         }
       }
 
-      // Final status refresh
       statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
       html = await statusResponse.text();
     }
@@ -266,9 +260,8 @@ export async function fetchMonstersGameData(
     // --- STEP 3: FINAL EXTRACTION ---
     const levelMatch = html.match(/class=["']char_level["'][^>]*>(?:Nivel\s*)?(\d+)/i);
     const goldMatch = html.match(/id=["']goldbalance["'][^>]*>([\d,.]+)</i);
-    const skillAvgMatch = html.match(/id=["']statbarSkillAverage["'][^>]*>(?:Promedio de Habilidad:)?\s*([\d,.]+)/i);
-    const expMatch = html.match(/Experiencia(?:.*?):\s*.*?\(?\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\)?/si) 
-                  || html.match(/Experiencia:?\s*([\d,.]+)\s*[|/]\s*([\d,.]+)/i);
+    const skillMatch = html.match(/id=["']statbarSkillAverage["'][^>]*>(?:.*?):\s*([\d,.]+)/i);
+    const xpMatch = html.match(/Experiencia(?:.*?):\s*.*?\(?\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\)?/si);
 
     const findStat = (label: string) => {
       const regex = new RegExp(`${label}:.*?\\(\\s*(\\d+)\\s*\\)`, 'si');
@@ -280,9 +273,9 @@ export async function fetchMonstersGameData(
       gold: parseMGNumber(goldMatch?.[1] || "0"),
       stamina: stamina,
       maxStamina: maxStamina,
-      experience: parseMGNumber(expMatch?.[1] || "0"),
-      nextLevelExp: parseMGNumber(expMatch?.[2] || "100"),
-      skillAverage: parseMGNumber(skillAvgMatch?.[1] || "0"),
+      experience: parseMGNumber(xpMatch?.[1] || "0"),
+      nextLevelExp: parseMGNumber(xpMatch?.[2] || "100"),
+      skillAverage: parseMGNumber(skillMatch?.[1] || "0"),
       attributes: {
         strength: findStat('Fuerza'),
         defense: findStat('Defensa'),
@@ -292,9 +285,13 @@ export async function fetchMonstersGameData(
       }
     };
 
-    logDebug(`[SYNC] Final Stats Sync OK. Level: ${stats.level}, Gold: ${stats.gold}`);
+    logDebug(`[SYNC] Final Stats Sync OK.`);
 
-    return { race: (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf', stats, logs };
+    return { 
+      race: (html.toLowerCase().includes('vampiro') || html.toLowerCase().includes('vampira')) ? 'Vampire' : 'Werewolf', 
+      stats, 
+      logs 
+    };
 
   } catch (error: any) {
     return {
