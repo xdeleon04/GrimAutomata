@@ -169,7 +169,7 @@ export async function fetchMonstersGameData(
           
           if (settings.pvp_attack) {
             const targetName = settings.pvp_target_name;
-            const searchOpt = settings.pvp_search_strategy || '';
+            const searchOpt = settings.pvp_search_strategy === 'normal' ? '' : (settings.pvp_search_strategy || '');
             logDebug(`[AUTOMATA] Initiating ${targetName ? `targeted hunt for [${targetName}]` : 'district hunt'} with strategy [${searchOpt || 'Normal'}]...`);
             
             const pvpSearchPayload = new URLSearchParams({
