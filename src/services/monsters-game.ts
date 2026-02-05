@@ -73,18 +73,17 @@ export async function fetchMonstersGameData(
     updateCookies(preAuthResponse.headers.getSetCookie());
     const preAuthHtml = await preAuthResponse.text();
     
-    // Extract CSRF token if present (common in Django apps like MoonID)
     const csrfMatch = preAuthHtml.match(/name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i);
     const csrfToken = csrfMatch ? csrfMatch[1] : '';
     logDebug(`[DEBUG] CSRF Token found: ${csrfToken ? 'YES' : 'NO'}`);
 
-    logDebug(`[DEBUG] Step 2: Authenticating with MoonID`);
+    logDebug(`[DEBUG] Step 2: Authenticating with MoonID (POST)`);
     
-    // 1b. Perform Login
+    // 1b. Perform Login (mimicking the payload from DevTools)
     const loginPayload = new URLSearchParams({
+      csrfmiddlewaretoken: csrfToken,
       username: username,
       password: password,
-      csrfmiddlewaretoken: csrfToken,
       next: '/api/account/connect/83/'
     });
 
@@ -108,15 +107,46 @@ export async function fetchMonstersGameData(
     updateCookies(loginResponse.headers.getSetCookie());
 
     if (loginResponse.status === 403) {
-      logDebug(`[DEBUG] CRITICAL: MoonID Sanctuary denied entry (403). Possible bot protection or rate limiting.`);
-      throw new Error("Forbidden: MoonID sanctuary denied access. Ensure credentials are valid and try again later.");
+      logDebug(`[DEBUG] CRITICAL: MoonID Sanctuary denied entry (403). Possible bot protection.`);
+      throw new Error("Forbidden: MoonID sanctuary denied access.");
+    }
+
+    // 1c. Follow Redirect to API Connect
+    let targetUrl = loginResponse.headers.get('Location');
+    if (loginResponse.status === 302 && targetUrl) {
+      if (targetUrl.startsWith('/')) targetUrl = 'https://moonid.net' + targetUrl;
+      logDebug(`[DEBUG] Redirecting to Connect API: ${targetUrl}`);
+      
+      const connectResponse = await fetch(targetUrl, {
+        headers: {
+          'Cookie': getCookieString(),
+          'User-Agent': userAgent,
+          'Referer': 'https://moonid.net/account/login/'
+        },
+        redirect: 'manual'
+      });
+      updateCookies(connectResponse.headers.getSetCookie());
+      
+      // 1d. Follow final redirect to the game server
+      let gameUrl = connectResponse.headers.get('Location');
+      if (gameUrl) {
+        logDebug(`[DEBUG] Finalizing connection to Game Realm: ${gameUrl}`);
+        const gameInitResponse = await fetch(gameUrl, {
+          headers: {
+            'Cookie': getCookieString(),
+            'User-Agent': userAgent
+          },
+          redirect: 'manual'
+        });
+        updateCookies(gameInitResponse.headers.getSetCookie());
+      }
     }
 
     // 2. Connect to the specific game server status page
-    const realmUrl = `https://${server}/index.php?ac=status`;
-    logDebug(`[DEBUG] Step 3: Penetrating Realm Status: ${realmUrl}`);
+    const statusUrl = `https://${server}/index.php?ac=status`;
+    logDebug(`[DEBUG] Step 3: Penetrating Realm Status: ${statusUrl}`);
     
-    const statusResponse = await fetch(realmUrl, {
+    const statusResponse = await fetch(statusUrl, {
       headers: {
         'Cookie': getCookieString(),
         'User-Agent': userAgent,
@@ -127,11 +157,7 @@ export async function fetchMonstersGameData(
     const html = await statusResponse.text();
     logDebug(`[DEBUG] Sanctuary HTML Length: ${html.length} chars`);
 
-    if (html.includes('login') && html.length < 5000) {
-      logDebug(`[DEBUG] WARNING: Redirected to login. Session might not have bound correctly.`);
-    }
-
-    // 3. Extract Stats using Regex targeting the Spanish UI
+    // Extract Stats using Regex targeting the Spanish UI provided by the user
     const extract = (regex: RegExp, content: string) => {
       const match = content.match(regex);
       return match ? match[1] : null;
@@ -141,7 +167,7 @@ export async function fetchMonstersGameData(
     const rawGold = extract(/id="goldbalance">([\d,.]+)<\/span>/i, html);
     const gold = parseMGNumber(rawGold);
     
-    // Experiencia: 1411 / 1445
+    // Experiencia: 1411 / 1445 (Targeting the #statbar or Skill Table format)
     const expMatch = html.match(/Experiencia:\s*([\d.]+)\s*\/\s*([\d.]+)/i);
     const experience = expMatch ? parseInt(expMatch[1].replace(/\./g, '')) : 0;
     const nextLevelExp = expMatch ? parseInt(expMatch[2].replace(/\./g, '')) : 0;
