@@ -122,9 +122,10 @@ export async function fetchMonstersGameData(
     let html = await statusResponse.text();
 
     // Basic State Detection
-    const staminaMatch = html.match(/Energía\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/si);
+    const staminaMatch = html.match(/Energía\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/si)
+                       || html.match(/Energía\s+vital:\s*([\d,.]+)/i);
     const stamina = parseMGNumber(staminaMatch ? staminaMatch[1] : "0");
-    const maxStamina = parseMGNumber(staminaMatch ? staminaMatch[2] : "100");
+    const maxStamina = parseMGNumber(staminaMatch && staminaMatch[2] ? staminaMatch[2] : "780");
     const staminaReserve = parseInt(settings.stamina_reserve || '5');
 
     const isBusy = html.includes("trabajando") || html.includes("misión") || html.includes("Gruta Ancestral");
@@ -164,8 +165,14 @@ export async function fetchMonstersGameData(
               headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
               body: pvpPayload
             });
+            
             if (pvpRes.status === 200) {
-              logs.push({ type: 'BATTLE', message: 'Shadow Ritual: Hunting for Werewolves in the district.', timestamp: new Date().toISOString() });
+              const pvpResultHtml = await pvpRes.text();
+              if (pvpResultHtml.includes("scanned the area") || pvpResultHtml.includes("in vain") || pvpResultHtml.includes("Adversario in vain")) {
+                logs.push({ type: 'INFO', message: 'Shadow Ritual: Scanned for Werewolves in vain.', timestamp: new Date().toISOString() });
+              } else {
+                logs.push({ type: 'BATTLE', message: 'Shadow Ritual: Hunting for Werewolves in the district.', timestamp: new Date().toISOString() });
+              }
             }
           }
         }
@@ -214,7 +221,7 @@ export async function fetchMonstersGameData(
     }
 
     // --- STEP 3: FINAL EXTRACTION ---
-    // Extract Level (handles "Nivel 17")
+    // Extract Level
     const levelMatch = html.match(/class=["']char_level["'][^>]*>(?:Nivel\s*)?(\d+)/i);
     
     // Extract Gold
@@ -223,7 +230,7 @@ export async function fetchMonstersGameData(
     // Extract Skill Average (Promedio de Habilidad)
     const skillAvgMatch = html.match(/id=["']statbarSkillAverage["'][^>]*>.*?([\d,.]+)/i);
     
-    // Extract Experience (Current / Next) - handles both (131|165) and "131 / 165"
+    // Extract Experience (Current / Next)
     const expMatch = html.match(/Experiencia(?:.*?):\s*.*?\(?\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\)?/si) 
                   || html.match(/Experiencia:?\s*([\d,.]+)\s*[|/]\s*([\d,.]+)/i);
 
