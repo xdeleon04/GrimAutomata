@@ -179,12 +179,29 @@ export async function fetchMonstersGameData(
                     sac: 'attack',
                     gegnerid: gegnerIdMatch[1]
                   });
-                  await fetch(huntPageUrl, {
+                  const battleRes = await fetch(huntPageUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
                     body: attackPayload
                   });
-                  logs.push({ type: 'BATTLE', message: `Shadow Ritual: Successful hunt. Asalto launched against target ID ${gegnerIdMatch[1]}.`, timestamp: new Date().toISOString() });
+                  
+                  const battleHtml = await battleRes.text();
+                  const winnerMatch = battleHtml.match(/headerRowCWinner">Vencedor\/a: (.*?)<\/div>/i);
+                  const lootMatch = battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i);
+                  const battleExpMatch = battleHtml.match(/han sido sumados (\d+) punto\(s\) de experiencia/i);
+
+                  if (winnerMatch) {
+                    const isWinner = winnerMatch[1].trim() === username || winnerMatch[1].trim().includes(username);
+                    const loot = lootMatch ? lootMatch[1] : '0';
+                    const exp = battleExpMatch ? battleExpMatch[1] : '0';
+                    logs.push({ 
+                      type: 'BATTLE', 
+                      message: `Shadow Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} against rival. Loot: ${loot} gold. Exp: +${exp}.`, 
+                      timestamp: new Date().toISOString() 
+                    });
+                  } else {
+                    logs.push({ type: 'BATTLE', message: `Shadow Ritual: Successful hunt. Asalto launched against target ID ${gegnerIdMatch[1]}.`, timestamp: new Date().toISOString() });
+                  }
                 }
               } else if (huntResultHtml.includes("scanned the area") || huntResultHtml.includes("in vain") || huntResultHtml.includes("Adversario in vain")) {
                 logs.push({ type: 'INFO', message: 'Shadow Ritual: Scanned for Werewolves in vain.', timestamp: new Date().toISOString() });
@@ -237,7 +254,7 @@ export async function fetchMonstersGameData(
     }
 
     // --- STEP 3: FINAL EXTRACTION ---
-    // Extract Level - Handles both "Nivel 17" and pure numbers
+    // Extract Level - Handles "Nivel 17"
     const levelMatch = html.match(/class=["']char_level["'][^>]*>(?:Nivel\s*)?(\d+)/i);
     
     // Extract Gold
@@ -246,7 +263,7 @@ export async function fetchMonstersGameData(
     // Extract Skill Average (Promedio de Habilidad)
     const skillAvgMatch = html.match(/id=["']statbarSkillAverage["'][^>]*>.*?([\d,.]+)/i);
     
-    // Extract Experience (Current / Next) - Handles (1411|1445) and 1411 / 1445
+    // Extract Experience (Current / Next)
     const expMatch = html.match(/Experiencia(?:.*?):\s*.*?\(?\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\)?/si) 
                   || html.match(/Experiencia:?\s*([\d,.]+)\s*[|/]\s*([\d,.]+)/i);
 
@@ -275,7 +292,7 @@ export async function fetchMonstersGameData(
     };
 
     if (stats.level > 0) {
-      logs.push({ type: 'INFO', message: `Realm synchronization complete. Level ${stats.level}.`, timestamp: new Date().toISOString() });
+      logDebug(`[SYNC] Final stats: Level ${stats.level}, Gold ${stats.gold}, XP ${stats.experience}/${stats.nextLevelExp}`);
     }
 
     return { race, stats, logs };
