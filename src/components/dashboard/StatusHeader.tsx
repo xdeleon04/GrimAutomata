@@ -55,7 +55,9 @@ export function StatusHeader() {
       });
 
       // Update character stats in Firestore
+      // We must include 'id' because security rules require request.resource.data.id == userId
       setDocumentNonBlocking(userDocRef, {
+        id: user.uid,
         race: result.race,
         level: result.stats.level,
         gold: result.stats.gold,
