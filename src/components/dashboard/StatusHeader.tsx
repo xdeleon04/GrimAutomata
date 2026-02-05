@@ -2,30 +2,81 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { Power, Play, Square, Activity, ShieldAlert, Swords } from 'lucide-react';
+import { Power, Play, Square, Activity, ShieldAlert, Swords, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
+import { useUser, useFirestore, useDoc, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
+import { doc, collection, serverTimestamp } from 'firebase/firestore';
+import { syncMoonId } from '@/ai/flows/moon-id-sync-flow';
 
 export function StatusHeader() {
+  const { user } = useUser();
+  const db = useFirestore();
   const [isRunning, setIsRunning] = useState(false);
   const [uptime, setUptime] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const credentialRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return doc(db, 'users', user.uid, 'moonIdCredentials', 'primary');
+  }, [db, user]);
+
+  const { data: credentials } = useDoc(credentialRef);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRunning) {
       interval = setInterval(() => {
         setUptime(prev => prev + 1);
+        // Periodic sync simulation
+        if (uptime > 0 && uptime % 30 === 0) {
+          triggerSync();
+        }
       }, 1000);
+    } else {
+      setUptime(0);
     }
     return () => clearInterval(interval);
-  }, [isRunning]);
+  }, [isRunning, uptime]);
+
+  const triggerSync = async () => {
+    if (!user || !db || !credentials) return;
+    
+    setIsSyncing(true);
+    try {
+      const result = await syncMoonId({
+        username: credentials.moonIdUsername,
+        server: credentials.description || 'en1',
+      });
+
+      const logsRef = collection(db, 'users', user.uid, 'activityLogs');
+      result.logs.forEach(log => {
+        addDocumentNonBlocking(logsRef, {
+          userId: user.uid,
+          timestamp: new Date().toISOString(),
+          logMessage: log.message,
+          logLevel: log.type.toUpperCase(),
+        });
+      });
+    } catch (error) {
+      console.error("Sync failed", error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const handleToggle = () => {
+    if (!isRunning && credentials) {
+      triggerSync();
+    }
+    setIsRunning(!isRunning);
   };
 
   return (
@@ -45,19 +96,22 @@ export function StatusHeader() {
       
       <div className="flex items-center gap-3 w-full sm:w-auto">
         <div className="hidden lg:flex items-center gap-6 mr-6 text-sm">
+          {isSyncing && (
+            <div className="flex items-center gap-2 text-accent">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Invoking Ritual...</span>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <Swords className="w-4 h-4 text-accent" />
-            <span className="text-muted-foreground">Battles: <span className="text-foreground">142</span></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-accent" />
-            <span className="text-muted-foreground">Alerts: <span className="text-foreground">0</span></span>
+            <span className="text-muted-foreground">Active Pulse</span>
           </div>
         </div>
         
         <Button 
           variant={isRunning ? "destructive" : "default"}
-          onClick={() => setIsRunning(!isRunning)}
+          onClick={handleToggle}
+          disabled={!credentials && !isRunning}
           className={cn(
             "flex-1 sm:flex-none gap-2 px-8 font-bold uppercase tracking-wider",
             !isRunning && "bg-accent text-accent-foreground hover:bg-accent/90"
