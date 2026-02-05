@@ -1,0 +1,227 @@
+{
+  "entities": {
+    "MoonIdCredential": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MoonIdCredential",
+      "type": "object",
+      "description": "Stores user's Moon ID login credentials for automated login to the MonsterGame.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the MoonIdCredential entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User entity. (Relationship: User 1:N MoonIdCredential)"
+        },
+        "moonIdUsername": {
+          "type": "string",
+          "description": "Username for the Moon ID account."
+        },
+        "encryptedMoonIdPassword": {
+          "type": "string",
+          "description": "Encrypted password for the Moon ID account. Encryption implementation should be handled at the application layer, this field only stores the encrypted data. NEVER store plain text passwords."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description of these credentials."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "moonIdUsername",
+        "encryptedMoonIdPassword"
+      ]
+    },
+    "AutomationSetting": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AutomationSetting",
+      "type": "object",
+      "description": "Stores configurable automation settings for the bot.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the AutomationSetting entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User entity. (Relationship: User 1:N AutomationSetting)"
+        },
+        "settingName": {
+          "type": "string",
+          "description": "Name of the automation setting."
+        },
+        "settingValue": {
+          "type": "string",
+          "description": "Value of the automation setting; can be a string representation of other data types."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description of what this setting controls."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "settingName",
+        "settingValue"
+      ]
+    },
+    "ActivityLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ActivityLog",
+      "type": "object",
+      "description": "Logs the bot's actions in real-time.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ActivityLog entry."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User entity. (Relationship: User 1:N ActivityLog)"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp of the activity log entry.",
+          "format": "date-time"
+        },
+        "logMessage": {
+          "type": "string",
+          "description": "The log message describing the bot's action."
+        },
+        "logLevel": {
+          "type": "string",
+          "description": "Severity level of the log message (e.g., INFO, WARNING, ERROR)."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "timestamp",
+        "logMessage",
+        "logLevel"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the GrimAutomata application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "username": {
+          "type": "string",
+          "description": "Username of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "creationDate": {
+          "type": "string",
+          "description": "Date and time when the user account was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "username",
+        "email",
+        "creationDate"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profile information.  This top-level user document is accessible to anyone and SHOULD NOT contain sensitive information.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/moonIdCredentials/{credentialId}",
+        "definition": {
+          "entityName": "MoonIdCredential",
+          "schema": {
+            "$ref": "#/backend/entities/MoonIdCredential"
+          },
+          "description": "Stores user's Moon ID credentials. Accessible only by the user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "credentialId",
+              "description": "The unique identifier for the MoonIdCredential entity."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/automationSettings/{settingId}",
+        "definition": {
+          "entityName": "AutomationSetting",
+          "schema": {
+            "$ref": "#/backend/entities/AutomationSetting"
+          },
+          "description": "Stores automation settings for a user. Accessible only by the user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "settingId",
+              "description": "The unique identifier for the AutomationSetting entity."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/activityLogs/{logId}",
+        "definition": {
+          "entityName": "ActivityLog",
+          "schema": {
+            "$ref": "#/backend/entities/ActivityLog"
+          },
+          "description": "Stores activity logs for a user. Accessible only by the user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "logId",
+              "description": "The unique identifier for the ActivityLog entry."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to manage user credentials, automation settings, and activity logs for the GrimAutomata application. It leverages path-based ownership for user-specific data, ensuring clear ownership and simplified security rules. Each user's data is stored under their respective user ID, following the `/users/{userId}/...` pattern. This design enforces Authorization Independence by avoiding `get()` calls in security rules. Each collection clearly defines who has access based on the path. \n\nSpecifically:\n\n*   `/users/{userId}/moonIdCredentials/{credentialId}`: Stores Moon ID credentials, ensuring only the user can access their own credentials.\n*   `/users/{userId}/automationSettings/{settingId}`: Stores automation settings, accessible only by the user.\n*   `/users/{userId}/activityLogs/{logId}`: Stores activity logs, accessible only by the user.  This facilitates QAPs by enabling secure `list` operations; a user can only list the logs that belong to them and are stored within their dedicated path.\n\nThis design prioritizes security, scalability, and ease of debugging by adhering to the principles of Authorization Independence, Clarity of Intent, and Structural Segregation."
+  }
+}
