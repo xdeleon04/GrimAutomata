@@ -155,23 +155,39 @@ export async function fetchMonstersGameData(
             logs.push({ type: 'INFO', message: `Shadow Ritual: PvP cooldown active (${pvpCooldownMatch[1]}m remaining).`, timestamp: new Date().toISOString() });
           } else {
             logDebug(`[AUTOMATA] Initiating random district hunt...`);
-            const pvpPayload = new URLSearchParams({
+            const pvpSearchPayload = new URLSearchParams({
               ac: 'raubzug',
               sac: 'gegner',
               searchopt: '', // Normal search
             });
-            const pvpRes = await fetch(huntPageUrl, {
+            const pvpSearchRes = await fetch(huntPageUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
-              body: pvpPayload
+              body: pvpSearchPayload
             });
             
-            if (pvpRes.status === 200) {
-              const pvpResultHtml = await pvpRes.text();
-              if (pvpResultHtml.includes("scanned the area") || pvpResultHtml.includes("in vain") || pvpResultHtml.includes("Adversario in vain")) {
+            if (pvpSearchRes.status === 200) {
+              const huntResultHtml = await pvpSearchRes.text();
+              
+              if (huntResultHtml.includes("successful") || huntResultHtml.includes("Exitoso")) {
+                // Successful search - Extract gegnerid and ATTACK
+                const gegnerIdMatch = huntResultHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
+                if (gegnerIdMatch) {
+                  logDebug(`[AUTOMATA] Target found! GegnerID: ${gegnerIdMatch[1]}. Launching asalto...`);
+                  const attackPayload = new URLSearchParams({
+                    ac: 'raubzug',
+                    sac: 'attack',
+                    gegnerid: gegnerIdMatch[1]
+                  });
+                  await fetch(huntPageUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
+                    body: attackPayload
+                  });
+                  logs.push({ type: 'BATTLE', message: `Shadow Ritual: Successful hunt. Asalto launched against target ID ${gegnerIdMatch[1]}.`, timestamp: new Date().toISOString() });
+                }
+              } else if (huntResultHtml.includes("scanned the area") || huntResultHtml.includes("in vain") || huntResultHtml.includes("Adversario in vain")) {
                 logs.push({ type: 'INFO', message: 'Shadow Ritual: Scanned for Werewolves in vain.', timestamp: new Date().toISOString() });
-              } else {
-                logs.push({ type: 'BATTLE', message: 'Shadow Ritual: Hunting for Werewolves in the district.', timestamp: new Date().toISOString() });
               }
             }
           }
@@ -221,7 +237,7 @@ export async function fetchMonstersGameData(
     }
 
     // --- STEP 3: FINAL EXTRACTION ---
-    // Extract Level
+    // Extract Level - Handles both "Nivel 17" and pure numbers
     const levelMatch = html.match(/class=["']char_level["'][^>]*>(?:Nivel\s*)?(\d+)/i);
     
     // Extract Gold
@@ -230,7 +246,7 @@ export async function fetchMonstersGameData(
     // Extract Skill Average (Promedio de Habilidad)
     const skillAvgMatch = html.match(/id=["']statbarSkillAverage["'][^>]*>.*?([\d,.]+)/i);
     
-    // Extract Experience (Current / Next)
+    // Extract Experience (Current / Next) - Handles (1411|1445) and 1411 / 1445
     const expMatch = html.match(/Experiencia(?:.*?):\s*.*?\(?\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\)?/si) 
                   || html.match(/Experiencia:?\s*([\d,.]+)\s*[|/]\s*([\d,.]+)/i);
 
