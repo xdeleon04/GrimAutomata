@@ -156,22 +156,12 @@ export async function fetchMonstersGameData(
     
     const acMatch = html.match(/var\s+ac\s*=\s*['"]([^'"]+)['"]/i);
     const currentAction = acMatch ? acMatch[1] : '';
-
     const lowerHtml = html.toLowerCase();
-    const isWorking = currentAction === 'friedhof' || 
-                      lowerHtml.includes("trabajando") || 
-                      lowerHtml.includes("cementerio") ||
-                      lowerHtml.includes("friedhof");
-                      
-    const isInMission = currentAction === 'ahnenstaette' || 
-                        lowerHtml.includes("misión") || 
-                        lowerHtml.includes("mision") ||
-                        lowerHtml.includes("gruta ancestral") ||
-                        lowerHtml.includes("ahnenstätte");
-                        
-    const isManhunting = currentAction === 'raubzug' && 
-                         (lowerHtml.includes("caza de humanos") || lowerHtml.includes("cazando") || lowerHtml.includes("raubzug"));
-                         
+
+    // Refined Busy State Detection
+    const isWorking = pvpCooldown > 0 && (currentAction === 'friedhof' || lowerHtml.includes("trabajando"));
+    const isInMission = pvpCooldown > 0 && (currentAction === 'ahnenstaette' || lowerHtml.includes("en la misión") || lowerHtml.includes("en la mision"));
+    const isManhunting = pvpCooldown > 0 && (currentAction === 'raubzug' && (lowerHtml.includes("caza de humanos") || lowerHtml.includes("cazando")));
     const isBusy = isWorking || isInMission || isManhunting;
 
     if (isBusy || pvpCooldown > 0) {
@@ -191,7 +181,7 @@ export async function fetchMonstersGameData(
         message: busyMsg, 
         timestamp: new Date().toISOString() 
       });
-      logDebug(`[SYNC] Busy State: ${isWorking ? 'WORKING' : isInMission ? 'MISSION' : isManhunting ? 'MANHUNTING' : 'PVP_COOLDOWN'}. Time: ${pvpCooldown}s`);
+      logDebug(`[SYNC] Busy State: ${isWorking ? 'WORKING' : isInMission ? 'MISSION' : isManhunting ? 'MANHUNTING' : 'RESTING'}. Time: ${pvpCooldown}s`);
     }
 
     // --- STEP 2: AUTOMATION RITUALS ---
@@ -199,11 +189,11 @@ export async function fetchMonstersGameData(
       if (stamina <= thresholdValue) {
         if (settings.auto_work !== false) {
           // Official guide: 10 points per hour restoration
-          const pointsNeeded = Math.max(0, thresholdValue - stamina + 20); 
+          const pointsNeeded = Math.max(0, thresholdValue - stamina + 10); 
           const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 10))); 
           
           const workUrl = `https://${server}/index.php?ac=friedhof`;
-          logDebug(`[AUTOMATA] Energy below threshold (${stamina.toFixed(0)}/${thresholdValue.toFixed(0)}). Initiating graveyard shift for ${hoursToWork}h (Rate: 10/hr).`);
+          logDebug(`[AUTOMATA] Energy below threshold (${stamina.toFixed(0)}/${thresholdValue.toFixed(0)}). Initiating graveyard shift for ${hoursToWork}h.`);
           
           const workPayload = new URLSearchParams({
             ac: 'friedhof',
@@ -316,12 +306,11 @@ export async function fetchMonstersGameData(
             const durationMinutes = parseInt(settings.manhunt_duration || '60');
             const jagdzeitSeconds = durationMinutes * 60;
             
-            // Refined payload based on ES1 specific observation
             const mPayload = new URLSearchParams({ 
               ac: 'raubzug', 
               sac: race === 'Vampire' ? 'vampir' : 'wolf', 
               jagdzeit: jagdzeitSeconds.toString(),
-              x: '194', // Real-world click coordinates from user
+              x: '194', 
               y: '45'
             });
             
