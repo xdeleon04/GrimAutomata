@@ -172,13 +172,13 @@ export async function fetchMonstersGameData(
     const secondsMatchStatus = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
     pvpCooldown = secondsMatchStatus ? parseInt(secondsMatchStatus[1]) : 0;
     
-    // Busy detection via status page content
-    const busyMessageBox = html.match(/class=["']pageContentC["'][^>]*>(.*?)<\/div>/si);
-    const busyMsgText = busyMessageBox ? busyMessageBox[1].toLowerCase() : "";
+    // Busy detection via status page content (specifically targeting busy notification)
+    const busyMsgBox = html.match(/class=["']pageContentC["'][^>]*>(.*?)<\/div>/si);
+    const busyText = busyMsgBox ? busyMsgBox[1].toLowerCase() : "";
     
-    const isWorking = busyMsgText.includes("trabajando") || busyMsgText.includes("cementerio") || busyMsgText.includes("friedhof");
-    const isInMission = busyMsgText.includes("misión") || busyMsgText.includes("mision") || busyMsgText.includes("grotto") || busyMsgText.includes("ahnenstaette");
-    const isManhunting = busyMsgText.includes("raid") || busyMsgText.includes("caza") || busyMsgText.includes("raubzug");
+    const isWorking = busyText.includes("trabajando") || busyText.includes("cementerio") || busyText.includes("friedhof");
+    const isInMission = busyText.includes("misión") || busyText.includes("mision") || busyText.includes("grotto") || busyText.includes("ahnenstaette");
+    const isManhunting = busyText.includes("raid") || busyText.includes("caza") || busyText.includes("raubzug");
     const isBusy = isWorking || isInMission || isManhunting || pvpCooldown > 0;
 
     if (isBusy) {
@@ -201,6 +201,8 @@ export async function fetchMonstersGameData(
       if (stamina <= thresholdValue && settings.auto_alchemy) {
         const budget = parseInt(settings.potion_budget || '445');
         const targetPotion = POTIONS.find(p => p.cost <= budget && p.cost <= currentGold) || POTIONS[POTIONS.length - 1];
+        
+        // Check for specific potion IDs in status page
         const potionInInventory = POTIONS.find(p => html.includes(`useitem=${p.id}`));
         
         if (potionInInventory) {
@@ -210,17 +212,36 @@ export async function fetchMonstersGameData(
           statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
           html = await statusResponse.text();
         } else if (currentGold >= targetPotion.cost) {
+          // Precise POST data for buying items as requested
           const buyPayload = new URLSearchParams({
-            ac: 'stadt', prod_group: '4', item_id: targetPotion.id.toString(), num_items: '1',
-            cur_price: targetPotion.cost.toString(), bonus_gold: '', server_amount: targetPotion.cost.toString(),
-            portal_amount: '0', action: 'buy', currency: 'gold', upgrade_level: '0', x: '172', y: '30'
+            ac: 'stadt',
+            prod_group: '4',
+            item_id: targetPotion.id.toString(),
+            num_items: '0', // Initial state
+            cur_price: targetPotion.cost.toString(),
+            bonus_gold: '',
+            server_amount: targetPotion.cost.toString(),
+            portal_amount: '0',
+            action: 'buy',
+            currency: 'gold',
+            upgrade_level: '0',
+            num_items_buy: '1', // The actual quantity to buy
+            x: '172',
+            y: '30'
           });
+          
           const traderUrl = `https://${server}/index.php?ac=stadt&sac=warenhaendler&action=buy&item_id=${targetPotion.id}&prod_group=4&currency=gold&sc=`;
           await fetch(traderUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent, 'Referer': traderUrl },
+            headers: { 
+              'Content-Type': 'application/x-www-form-urlencoded', 
+              'Cookie': getCookieString(), 
+              'User-Agent': userAgent,
+              'Referer': traderUrl
+            },
             body: buyPayload
           });
+          
           const useUrl = `https://${server}/index.php?ac=status&useitem=${targetPotion.id}`;
           await fetch(useUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
           logs.push({ type: 'LOOT', message: `Shadow Alchemy: Purchased and used ${targetPotion.name}.`, timestamp: new Date().toISOString() });
@@ -246,12 +267,32 @@ export async function fetchMonstersGameData(
         pvpCooldown = secondsMatchWork ? parseInt(secondsMatchWork[1]) : hoursToWork * 3600;
         logs.push({ type: 'INFO', message: `Shadow Ritual: Graveyard shift started for ${hoursToWork}h.`, timestamp: new Date().toISOString() });
       } else {
-        // --- STEP 3: COMBAT RITUALS ---
+        // --- STEP 3: COMBAT RITUALS (MANHUNT & PVP) ---
         const huntPageUrl = `https://${server}/index.php?ac=raubzug`;
         const huntPageRes = await fetch(huntPageUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
         const huntHtml = await huntPageRes.text();
         pvpCooldown = (huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || 0) as number;
         
+        // Parse Manhunt Results
+        if (huntHtml.includes("Resultado de la caza") || huntHtml.includes("raid result") || huntHtml.includes("You received")) {
+          const bloodMatch = huntHtml.match(/(\d+)\s+litros\s+de\s+sangre/i);
+          const huntGoldMatch = huntHtml.match(/([\d,.]+)\s+<img[^>]+alt=["']Oro["'][^>]*>\s+gold\s+coins/i);
+          const expMatch = huntHtml.match(/(\d+)\s+experience\s+points/i);
+          
+          if (bloodMatch || huntGoldMatch || expMatch) {
+            const blood = bloodMatch ? bloodMatch[1] : '0';
+            const gold = huntGoldMatch ? huntGoldMatch[1] : '0';
+            const exp = expMatch ? expMatch[1] : '0';
+            logs.push({ 
+              type: 'MANHUNT', 
+              message: `Manhunt Harvest: Collected ${blood} liters of blood, ${gold} gold, and ${exp} XP.`, 
+              timestamp: new Date().toISOString() 
+            });
+          } else if (huntHtml.includes("nothing to be found") || huntHtml.includes("nada que encontrar")) {
+            logs.push({ type: 'MANHUNT', message: "Manhunt result: Nothing to be found in the shadows.", timestamp: new Date().toISOString() });
+          }
+        }
+
         if (pvpCooldown == 0) {
           const humanLimitReached = huntHtml.includes("used all of today's hunting time") || huntHtml.includes("ya has usado todo tu tiempo de caza");
           if (humanLimitReached && settings.pvp_attack) {
@@ -269,7 +310,14 @@ export async function fetchMonstersGameData(
             }
           } else if (settings.auto_manhunt && !humanLimitReached) {
             const duration = parseInt(settings.manhunt_duration || '60');
-            const mPayload = new URLSearchParams({ ac: 'raubzug', sac: race === 'Vampire' ? 'vampir' : 'wolf', jagdzeit: (duration * 60).toString(), x: '194', y: '45' });
+            // Precise parameters for ES1 Manhunt as requested
+            const mPayload = new URLSearchParams({ 
+              ac: 'raubzug', 
+              sac: race === 'Vampire' ? 'vampir' : 'wolf', 
+              jagdzeit: (duration * 60).toString(),
+              x: '194',
+              y: '45'
+            });
             const mRes = await fetch(huntPageUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: mPayload });
             pvpCooldown = (mRes.headers.get('Location')?.match(/SecondsCOUNTER\s*=\s*(\d+)/i)?.[1] || duration * 60) as number;
             logs.push({ type: 'MANHUNT', message: `Manhunt started for ${duration}m.`, timestamp: new Date().toISOString() });
