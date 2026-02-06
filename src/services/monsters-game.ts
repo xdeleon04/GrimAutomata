@@ -269,12 +269,12 @@ export async function fetchMonstersGameData(
         if (huntHtml.includes("Resultado de la caza") || huntHtml.includes("Resultado")) {
           const bloodMatch = huntHtml.match(/(\d+)\s+litros\s+de\s+sangre/i);
           const huntGoldMatch = huntHtml.match(/([\d,.]+)\s+<img[^>]+alt=["']Oro["']/i);
-          const expMatch = huntHtml.match(/(\d+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia)/i);
+          const huntExpMatch = huntHtml.match(/(\d+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia)/i);
           
-          if (bloodMatch || huntGoldMatch || expMatch) {
+          if (bloodMatch || huntGoldMatch || huntExpMatch) {
             const blood = bloodMatch ? bloodMatch[1] : '0';
             const gold = parseMGNumber(huntGoldMatch ? huntGoldMatch[1] : '0');
-            const exp = expMatch ? expMatch[1] : '0';
+            const exp = huntExpMatch ? huntExpMatch[1] : '0';
             logs.push({ 
               type: 'MANHUNT', 
               message: `Manhunt Harvest: Collected ${blood} liters of blood, ${gold.toFixed(2)} gold, and ${exp} XP.`, 
@@ -293,7 +293,9 @@ export async function fetchMonstersGameData(
             const searchHtml = await pvpSearchRes.text();
             
             const gegnerIdMatch = searchHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
-            const rivalNameMatch = searchHtml.match(/<h3>(?:versus|contra)\s+([^<]+)<\/h3>/i) || searchHtml.match(/gegnerid=\d+[^>]*>([^<]+)<\/a>/i);
+            const rivalNameMatch = searchHtml.match(/<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i) 
+                                || searchHtml.match(/gegnerid=\d+[^>]*>([^<]+)<\/a>/i)
+                                || searchHtml.match(/sac=info&amp;id=\d+[^>]*>([^<]+)<\/a>/i);
             const rivalName = rivalNameMatch ? rivalNameMatch[1].trim() : 'Unknown Rival';
 
             if (gegnerIdMatch) {
@@ -301,8 +303,14 @@ export async function fetchMonstersGameData(
               const battleHtml = await battleRes.text();
               const isWinner = (battleHtml.includes('headerRowCWinner') && battleHtml.includes(username)) || battleHtml.includes('ganado');
               const loot = parseMGNumber(battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i)?.[1] || '0');
+              const battleExp = parseMGNumber(battleHtml.match(/([\d,.]+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia)/i)?.[1] || '0');
+              
               pvpCooldown = parseInt(battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || "900");
-              logs.push({ type: 'BATTLE', message: `PvP Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs ${rivalName}. Loot: ${loot.toFixed(2)} gold.`, timestamp: new Date().toISOString() });
+              logs.push({ 
+                type: 'BATTLE', 
+                message: `PvP Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs ${rivalName}. Loot: ${loot.toFixed(2)} gold, ${battleExp} XP.`, 
+                timestamp: new Date().toISOString() 
+              });
             }
           } else if (settings.auto_manhunt && !humanLimitReached) {
             const duration = parseInt(settings.manhunt_duration || '3600');
