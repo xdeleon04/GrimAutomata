@@ -253,8 +253,8 @@ export async function fetchMonstersGameData(
       const currentStamina = parseMGNumber(finalStaminaMatch ? finalStaminaMatch[1] : stamina.toString());
 
       if (currentStamina <= thresholdValue && settings.auto_work !== false) {
-        const pointsNeeded = Math.max(0, thresholdValue - currentStamina + 20); 
-        const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 20))); 
+        const pointsNeeded = Math.max(0, thresholdValue - currentStamina + 10); 
+        const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 10))); 
         const workPayload = new URLSearchParams({ ac: 'friedhof', sac: 'startjob', arbeitszeit: hoursToWork.toString() });
         const workRes = await fetch(`https://${server}/index.php?ac=friedhof`, {
           method: 'POST',
