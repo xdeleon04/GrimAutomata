@@ -273,12 +273,11 @@ export async function fetchMonstersGameData(
           
           if (bloodMatch || huntGoldMatch || expMatch) {
             const blood = bloodMatch ? bloodMatch[1] : '0';
-            const goldRaw = huntGoldMatch ? huntGoldMatch[1] : '0';
-            const gold = goldRaw.replace(/\./g, '').replace(',', '.');
+            const gold = parseMGNumber(huntGoldMatch ? huntGoldMatch[1] : '0');
             const exp = expMatch ? expMatch[1] : '0';
             logs.push({ 
               type: 'MANHUNT', 
-              message: `Manhunt Harvest: Collected ${blood} liters of blood, ${gold} gold, and ${exp} XP.`, 
+              message: `Manhunt Harvest: Collected ${blood} liters of blood, ${gold.toFixed(2)} gold, and ${exp} XP.`, 
               timestamp: new Date().toISOString() 
             });
           } else if (huntHtml.includes("nothing to be found") || huntHtml.includes("nada que encontrar")) {
@@ -301,10 +300,9 @@ export async function fetchMonstersGameData(
               const battleRes = await fetch(huntPageUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: new URLSearchParams({ ac: 'raubzug', sac: 'attack', gegnerid: gegnerIdMatch[1] }) });
               const battleHtml = await battleRes.text();
               const isWinner = (battleHtml.includes('headerRowCWinner') && battleHtml.includes(username)) || battleHtml.includes('ganado');
-              const lootRaw = (battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i)?.[1] || '0');
-              const loot = lootRaw.replace(/\./g, '').replace(',', '.');
+              const loot = parseMGNumber(battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i)?.[1] || '0');
               pvpCooldown = parseInt(battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || "900");
-              logs.push({ type: 'BATTLE', message: `PvP Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs ${rivalName}. Loot: ${loot} gold.`, timestamp: new Date().toISOString() });
+              logs.push({ type: 'BATTLE', message: `PvP Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs ${rivalName}. Loot: ${loot.toFixed(2)} gold.`, timestamp: new Date().toISOString() });
             }
           } else if (settings.auto_manhunt && !humanLimitReached) {
             const duration = parseInt(settings.manhunt_duration || '3600');
@@ -359,7 +357,7 @@ export async function fetchMonstersGameData(
             
             if (currentGold >= cheapest.cost + alchemyReserve) {
               await fetch(`${trainingUrl}&typ=${cheapest.type}`, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
-              logs.push({ type: 'TRAINING', message: `Shadow Training: Enhanced ${cheapest.label} for ${cheapest.cost.toFixed(2).replace('.', ',')} gold.`, timestamp: new Date().toISOString() });
+              logs.push({ type: 'TRAINING', message: `Shadow Training: Enhanced ${cheapest.label} for ${cheapest.cost.toFixed(2)} gold.`, timestamp: new Date().toISOString() });
             }
           }
         }
