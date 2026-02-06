@@ -172,14 +172,15 @@ export async function fetchMonstersGameData(
     const secondsMatchStatus = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
     pvpCooldown = secondsMatchStatus ? parseInt(secondsMatchStatus[1]) : 0;
     
-    // Busy detection via status page content (specifically targeting busy notification)
     const busyMsgBox = html.match(/class=["']pageContentC["'][^>]*>(.*?)<\/div>/si);
     const busyText = busyMsgBox ? busyMsgBox[1].toLowerCase() : "";
     
     const isWorking = busyText.includes("trabajando") || busyText.includes("cementerio") || busyText.includes("friedhof");
     const isInMission = busyText.includes("misión") || busyText.includes("mision") || busyText.includes("grotto") || busyText.includes("ahnenstaette");
     const isManhunting = busyText.includes("raid") || busyText.includes("caza") || busyText.includes("raubzug");
-    const isBusy = isWorking || isInMission || isManhunting || pvpCooldown > 0;
+
+    // Busy detection must be timer-based to allow "stuck" activities to clear when pvpCooldown hits 0
+    const isBusy = pvpCooldown > 0;
 
     if (isBusy) {
       const timeLeft = formatDuration(pvpCooldown);
@@ -202,7 +203,6 @@ export async function fetchMonstersGameData(
         const budget = parseInt(settings.potion_budget || '445');
         const targetPotion = POTIONS.find(p => p.cost <= budget && p.cost <= currentGold) || POTIONS[POTIONS.length - 1];
         
-        // Check for specific potion IDs in status page
         const potionInInventory = POTIONS.find(p => html.includes(`useitem=${p.id}`));
         
         if (potionInInventory) {
@@ -212,12 +212,11 @@ export async function fetchMonstersGameData(
           statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
           html = await statusResponse.text();
         } else if (currentGold >= targetPotion.cost) {
-          // Precise POST data for buying items as requested
           const buyPayload = new URLSearchParams({
             ac: 'stadt',
             prod_group: '4',
             item_id: targetPotion.id.toString(),
-            num_items: '0', // Initial state
+            num_items: '0',
             cur_price: targetPotion.cost.toString(),
             bonus_gold: '',
             server_amount: targetPotion.cost.toString(),
@@ -225,7 +224,7 @@ export async function fetchMonstersGameData(
             action: 'buy',
             currency: 'gold',
             upgrade_level: '0',
-            num_items_buy: '1', // The actual quantity to buy
+            num_items_buy: '1',
             x: '172',
             y: '30'
           });
@@ -274,10 +273,10 @@ export async function fetchMonstersGameData(
         pvpCooldown = (huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || 0) as number;
         
         // Parse Manhunt Results
-        if (huntHtml.includes("Resultado de la caza") || huntHtml.includes("raid result") || huntHtml.includes("You received")) {
+        if (huntHtml.includes("Resultado de la caza") || huntHtml.includes("raid result") || huntHtml.includes("Resultado")) {
           const bloodMatch = huntHtml.match(/(\d+)\s+litros\s+de\s+sangre/i);
-          const huntGoldMatch = huntHtml.match(/([\d,.]+)\s+<img[^>]+alt=["']Oro["'][^>]*>\s+gold\s+coins/i);
-          const expMatch = huntHtml.match(/(\d+)\s+experience\s+points/i);
+          const huntGoldMatch = huntHtml.match(/([\d,.]+)\s+<img[^>]+alt=["']Oro["'][^>]*>\s+(?:gold\s+coins|monedas\s+de\s+oro|oro)/i);
+          const expMatch = huntHtml.match(/(\d+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia|experience)/i);
           
           if (bloodMatch || huntGoldMatch || expMatch) {
             const blood = bloodMatch ? bloodMatch[1] : '0';
@@ -303,14 +302,13 @@ export async function fetchMonstersGameData(
             if (gegnerIdMatch) {
               const battleRes = await fetch(huntPageUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: new URLSearchParams({ ac: 'raubzug', sac: 'attack', gegnerid: gegnerIdMatch[1] }) });
               const battleHtml = await battleRes.text();
-              const isWinner = battleHtml.includes('headerRowCWinner') && battleHtml.includes(username);
+              const isWinner = (battleHtml.includes('headerRowCWinner') && battleHtml.includes(username)) || battleHtml.includes('ganado');
               const loot = (battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i)?.[1] || '0');
               pvpCooldown = (battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || 900) as number;
               logs.push({ type: 'BATTLE', message: `PvP Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'}. Loot: ${loot} gold.`, timestamp: new Date().toISOString() });
             }
           } else if (settings.auto_manhunt && !humanLimitReached) {
             const duration = parseInt(settings.manhunt_duration || '60');
-            // Precise parameters for ES1 Manhunt as requested
             const mPayload = new URLSearchParams({ 
               ac: 'raubzug', 
               sac: race === 'Vampire' ? 'vampir' : 'wolf', 
@@ -328,7 +326,7 @@ export async function fetchMonstersGameData(
           const grottoUrl = `https://${server}/index.php?ac=ahnenstaette`;
           const gCheck = await fetch(grottoUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
           const gHtml = await gCheck.text();
-          if (!gHtml.includes("misión")) {
+          if (!gHtml.includes("misión") && !gHtml.includes("mision")) {
             const diffMap: any = { 'easy': '0', 'medium': '1', 'hard': '2' };
             await fetch(grottoUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: new URLSearchParams({ 'mision': 'true', 'schwierigkeit': diffMap[settings.mission_difficulty || 'medium'] || '1', 'go': 'Aceptar' }) });
             logs.push({ type: 'MISSION', message: `Entering Grotto (${settings.mission_difficulty || 'medium'}).`, timestamp: new Date().toISOString() });
@@ -357,7 +355,9 @@ export async function fetchMonstersGameData(
           if (availableTrainings.length > 0) {
             availableTrainings.sort((a, b) => a.cost - b.cost);
             const cheapest = availableTrainings[0];
-            if (currentGold >= cheapest.cost) {
+            const alchemyReserve = settings.auto_alchemy ? parseInt(settings.potion_budget || '445') : 0;
+            
+            if (currentGold >= cheapest.cost + alchemyReserve) {
               await fetch(`${trainingUrl}&typ=${cheapest.type}`, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
               logs.push({ type: 'TRAINING', message: `Shadow Training: Enhanced ${cheapest.label} for ${cheapest.cost.toLocaleString()} gold.`, timestamp: new Date().toISOString() });
             }
