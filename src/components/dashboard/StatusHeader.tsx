@@ -44,10 +44,11 @@ export function StatusHeader() {
   const triggerSync = useCallback(async () => {
     if (!user || !db || !credentials || !userDocRef || isSyncingRef.current) return;
     
+    // Immediately set these to prevent parallel executions
     isSyncingRef.current = true;
+    initialSyncRequiredRef.current = false;
     setIsSyncing(true);
     lastSyncRef.current = Date.now();
-    initialSyncRequiredRef.current = false;
     
     const config: Record<string, any> = {};
     settings?.forEach(s => {
@@ -128,13 +129,13 @@ export function StatusHeader() {
         const secondsSinceLastSync = lastSyncRef.current === 0 ? Infinity : (now - lastSyncRef.current) / 1000;
         
         // Trigger sync if:
-        // 1. We just started and haven't synced yet
+        // 1. We just started and haven't synced successfully yet
         // 2. A cooldown just reached 0
-        // 3. We are idle and 60 seconds have passed since the last update
+        // 3. We are idle (no cooldown) and 60 seconds have passed since the last update
         const shouldTrigger = (
           initialSyncRequiredRef.current || 
           justFinished || 
-          (currentCooldown === 0 && secondsSinceLastSync >= 60)
+          (cooldownRef.current === 0 && secondsSinceLastSync >= 60)
         );
 
         if (shouldTrigger && !isSyncingRef.current) {

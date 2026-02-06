@@ -157,24 +157,26 @@ export async function fetchMonstersGameData(
     const acMatch = html.match(/var\s+ac\s*=\s*['"]([^'"]+)['"]/i);
     const currentAction = acMatch ? acMatch[1] : '';
 
+    const lowerHtml = html.toLowerCase();
     const isWorking = currentAction === 'friedhof' || 
-                      html.toLowerCase().includes("trabajando") || 
-                      html.toLowerCase().includes("cementerio") ||
-                      html.toLowerCase().includes("friedhof");
+                      lowerHtml.includes("trabajando") || 
+                      lowerHtml.includes("cementerio") ||
+                      lowerHtml.includes("friedhof");
                       
     const isInMission = currentAction === 'ahnenstaette' || 
-                        html.toLowerCase().includes("misión") || 
-                        html.toLowerCase().includes("gruta ancestral") ||
-                        html.toLowerCase().includes("mision");
+                        lowerHtml.includes("misión") || 
+                        lowerHtml.includes("mision") ||
+                        lowerHtml.includes("gruta ancestral") ||
+                        lowerHtml.includes("ahnenstätte");
                         
     const isManhunting = currentAction === 'raubzug' && 
-                         (html.toLowerCase().includes("caza de humanos") || html.toLowerCase().includes("cazando"));
+                         (lowerHtml.includes("caza de humanos") || lowerHtml.includes("cazando") || lowerHtml.includes("raubzug"));
                          
     const isBusy = isWorking || isInMission || isManhunting;
 
     if (isBusy || pvpCooldown > 0) {
       const timeLeft = formatDuration(pvpCooldown);
-      let busyMsg = `Shadow Vigil: Character is currently resting. PvP Cooldown: ${timeLeft}.`;
+      let busyMsg = `Shadow Vigil: Character is currently resting. Cooldown: ${timeLeft}.`;
       
       if (isWorking) {
         busyMsg = `Shadow Vigil: Character is currently working at the graveyard. Shift ends in ${timeLeft}.`;
@@ -196,8 +198,7 @@ export async function fetchMonstersGameData(
     if (!isBusy && pvpCooldown === 0) {
       if (stamina <= thresholdValue) {
         if (settings.auto_work !== false) {
-          // Stamina/HP restores at a rate of 10 per hour according to official guide.
-          // We target threshold + a 20 point buffer to ensure we don't immediately drop below again.
+          // Official guide: 10 points per hour restoration
           const pointsNeeded = Math.max(0, thresholdValue - stamina + 20); 
           const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 10))); 
           
@@ -312,18 +313,35 @@ export async function fetchMonstersGameData(
               }
             }
           } else if (settings.auto_manhunt) {
-            const duration = settings.manhunt_duration || '60';
-            const mPayload = new URLSearchParams({ ac: 'raubzug', sac: 'vampir', duration: duration, search: 'Empezar la búsqueda' });
+            const durationMinutes = parseInt(settings.manhunt_duration || '60');
+            const jagdzeitSeconds = durationMinutes * 60;
+            
+            // On ES1, the form parameter for manhunt duration is 'jagdzeit' (seconds)
+            const mPayload = new URLSearchParams({ 
+              ac: 'raubzug', 
+              sac: race === 'Vampire' ? 'vampir' : 'wolf', 
+              jagdzeit: jagdzeitSeconds.toString() 
+            });
+            
             const mRes = await fetch(huntPageUrl, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent },
+              headers: { 
+                'Content-Type': 'application/x-www-form-urlencoded', 
+                'Cookie': getCookieString(), 
+                'User-Agent': userAgent,
+                'Referer': huntPageUrl
+              },
               body: mPayload
             });
             const mHtml = await mRes.text();
             const secondsMatchM = mHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
-            pvpCooldown = secondsMatchM ? parseInt(secondsMatchM[1]) : parseInt(duration) * 60;
+            pvpCooldown = secondsMatchM ? parseInt(secondsMatchM[1]) : jagdzeitSeconds;
             
-            logs.push({ type: 'MANHUNT', message: `Shadow Ritual: Manhunt started for ${duration}m. XP and Gold incoming. Cooldown: ${formatDuration(pvpCooldown)}.`, timestamp: new Date().toISOString() });
+            logs.push({ 
+              type: 'MANHUNT', 
+              message: `Shadow Ritual: Manhunt started for ${durationMinutes}m. Cooldown: ${formatDuration(pvpCooldown)}.`, 
+              timestamp: new Date().toISOString() 
+            });
           }
         }
 
@@ -332,7 +350,7 @@ export async function fetchMonstersGameData(
           const gCheck = await fetch(grottoUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
           const gHtml = await gCheck.text();
 
-          if (!gHtml.includes("ya estás") && !gHtml.includes("misión")) {
+          if (!gHtml.includes("ya estás") && !gHtml.includes("misión") && !gHtml.includes("mision")) {
             const diffMap = { 'easy': '0', 'medium': '1', 'hard': '2' };
             const diffVal = (diffMap as any)[settings.mission_difficulty || 'medium'] || '1';
             const gPayload = new URLSearchParams({ 'mision': 'true', 'schwierigkeit': diffVal, 'go': 'Aceptar' });
