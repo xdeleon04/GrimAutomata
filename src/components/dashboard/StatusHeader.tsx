@@ -47,6 +47,7 @@ export function StatusHeader() {
     isSyncingRef.current = true;
     setIsSyncing(true);
     lastSyncRef.current = Date.now();
+    initialSyncRequiredRef.current = false;
     
     const config: Record<string, any> = {};
     settings?.forEach(s => {
@@ -97,23 +98,13 @@ export function StatusHeader() {
         }, { merge: true });
       });
 
-      const performedAction = result.logs.some(l => 
-        l.type === 'BATTLE' || l.type === 'MANHUNT' || l.type === 'MISSION'
-      );
-      
-      if (performedAction && result.pvpCooldown === 0) {
-        setTimeout(() => {
-          if (isRunning) triggerSync();
-        }, 5000);
-      }
-
     } catch (error) {
       // Handled by FirebaseErrorListener
     } finally {
       isSyncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [user, db, credentials, userDocRef, settings, debugMode, isRunning]);
+  }, [user, db, credentials, userDocRef, settings, debugMode]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -122,8 +113,13 @@ export function StatusHeader() {
         setUptime(prev => prev + 1);
         
         let currentCooldown = 0;
+        let justFinished = false;
+
         setCooldown(prev => {
           currentCooldown = Math.max(0, prev - 1);
+          if (prev > 0 && currentCooldown === 0) {
+            justFinished = true;
+          }
           cooldownRef.current = currentCooldown;
           return currentCooldown;
         });
@@ -131,12 +127,17 @@ export function StatusHeader() {
         const now = Date.now();
         const secondsSinceLastSync = lastSyncRef.current === 0 ? Infinity : (now - lastSyncRef.current) / 1000;
         
-        const justFinishedCooldown = cooldownRef.current === 0 && secondsSinceLastSync > 1 && secondsSinceLastSync < 60 && lastSyncRef.current !== 0; 
-        const regularHeartbeat = cooldownRef.current === 0 && secondsSinceLastSync >= 60;
-        const initialSync = initialSyncRequiredRef.current || lastSyncRef.current === 0;
+        // Trigger sync if:
+        // 1. We just started and haven't synced yet
+        // 2. A cooldown just reached 0
+        // 3. We are idle and 60 seconds have passed since the last update
+        const shouldTrigger = (
+          initialSyncRequiredRef.current || 
+          justFinished || 
+          (currentCooldown === 0 && secondsSinceLastSync >= 60)
+        );
 
-        if ((initialSync || justFinishedCooldown || regularHeartbeat) && !isSyncingRef.current) {
-          initialSyncRequiredRef.current = false;
+        if (shouldTrigger && !isSyncingRef.current) {
           triggerSync();
         }
       }, 1000);
@@ -146,6 +147,7 @@ export function StatusHeader() {
       cooldownRef.current = 0;
       lastSyncRef.current = 0;
       initialSyncRequiredRef.current = false;
+      isSyncingRef.current = false;
     }
     return () => clearInterval(interval);
   }, [isRunning, triggerSync]);
