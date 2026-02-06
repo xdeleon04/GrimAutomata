@@ -228,7 +228,7 @@ export async function fetchMonstersGameData(
 
           logs.push({ 
             type: 'INFO', 
-            message: `Shadow Ritual: Energy low (${stamina.toFixed(0)}). Graveyard shift started for ${hoursToWork}h to restore power.`, 
+            message: `Shadow Ritual: Energy low (${stamina.toFixed(0)}). Graveyard shift started for ${hoursToWork}h. Cooldown: ${formatDuration(pvpCooldown)}.`, 
             timestamp: new Date().toISOString() 
           });
         } else {
@@ -316,11 +316,13 @@ export async function fetchMonstersGameData(
             const durationMinutes = parseInt(settings.manhunt_duration || '60');
             const jagdzeitSeconds = durationMinutes * 60;
             
-            // On ES1, the form parameter for manhunt duration is 'jagdzeit' (seconds)
+            // Refined payload based on ES1 specific observation
             const mPayload = new URLSearchParams({ 
               ac: 'raubzug', 
               sac: race === 'Vampire' ? 'vampir' : 'wolf', 
-              jagdzeit: jagdzeitSeconds.toString() 
+              jagdzeit: jagdzeitSeconds.toString(),
+              x: '194', // Real-world click coordinates from user
+              y: '45'
             });
             
             const mRes = await fetch(huntPageUrl, {
@@ -363,7 +365,7 @@ export async function fetchMonstersGameData(
             const gSecondsMatch = gResHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
             pvpCooldown = gSecondsMatch ? parseInt(gSecondsMatch[1]) : 600;
 
-            logs.push({ type: 'MISSION', message: `Shadow Ritual: Entering Ancestral Grotto (${settings.mission_difficulty || 'medium'}). Rest period: ${formatDuration(pvpCooldown)}.`, timestamp: new Date().toISOString() });
+            logs.push({ type: 'MISSION', message: `Shadow Ritual: Entering Ancestral Grotto (${settings.mission_difficulty || 'medium'}). Cooldown: ${formatDuration(pvpCooldown)}.`, timestamp: new Date().toISOString() });
           }
         }
       }
