@@ -179,7 +179,6 @@ export async function fetchMonstersGameData(
     const isInMission = busyText.includes("misión") || busyText.includes("mision") || busyText.includes("grotto") || busyText.includes("ahnenstaette");
     const isManhunting = busyText.includes("raid") || busyText.includes("caza") || busyText.includes("raubzug");
 
-    // Busy detection must be timer-based to allow "stuck" activities to clear when pvpCooldown hits 0
     const isBusy = pvpCooldown > 0;
 
     if (isBusy) {
@@ -270,7 +269,7 @@ export async function fetchMonstersGameData(
         const huntPageUrl = `https://${server}/index.php?ac=raubzug`;
         const huntPageRes = await fetch(huntPageUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
         const huntHtml = await huntPageRes.text();
-        pvpCooldown = (huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || 0) as number;
+        pvpCooldown = parseInt(huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || "0");
         
         // Parse Manhunt Results
         if (huntHtml.includes("Resultado de la caza") || huntHtml.includes("raid result") || huntHtml.includes("Resultado")) {
@@ -280,7 +279,8 @@ export async function fetchMonstersGameData(
           
           if (bloodMatch || huntGoldMatch || expMatch) {
             const blood = bloodMatch ? bloodMatch[1] : '0';
-            const gold = huntGoldMatch ? huntGoldMatch[1] : '0';
+            const goldRaw = huntGoldMatch ? huntGoldMatch[1] : '0';
+            const gold = goldRaw.replace(/\./g, '').replace(',', '.'); // Normalizing comma to dot for display
             const exp = expMatch ? expMatch[1] : '0';
             logs.push({ 
               type: 'MANHUNT', 
@@ -303,8 +303,9 @@ export async function fetchMonstersGameData(
               const battleRes = await fetch(huntPageUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: new URLSearchParams({ ac: 'raubzug', sac: 'attack', gegnerid: gegnerIdMatch[1] }) });
               const battleHtml = await battleRes.text();
               const isWinner = (battleHtml.includes('headerRowCWinner') && battleHtml.includes(username)) || battleHtml.includes('ganado');
-              const loot = (battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i)?.[1] || '0');
-              pvpCooldown = (battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || 900) as number;
+              const lootRaw = (battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i)?.[1] || '0');
+              const loot = lootRaw.replace(/\./g, '').replace(',', '.');
+              pvpCooldown = parseInt(battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || "900");
               logs.push({ type: 'BATTLE', message: `PvP Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'}. Loot: ${loot} gold.`, timestamp: new Date().toISOString() });
             }
           } else if (settings.auto_manhunt && !humanLimitReached) {
@@ -317,7 +318,8 @@ export async function fetchMonstersGameData(
               y: '45'
             });
             const mRes = await fetch(huntPageUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: mPayload });
-            pvpCooldown = (mRes.headers.get('Location')?.match(/SecondsCOUNTER\s*=\s*(\d+)/i)?.[1] || duration * 60) as number;
+            const mHtml = await mRes.text();
+            pvpCooldown = parseInt(mHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || (duration * 60).toString());
             logs.push({ type: 'MANHUNT', message: `Manhunt started for ${duration}m.`, timestamp: new Date().toISOString() });
           }
         }
@@ -359,7 +361,7 @@ export async function fetchMonstersGameData(
             
             if (currentGold >= cheapest.cost + alchemyReserve) {
               await fetch(`${trainingUrl}&typ=${cheapest.type}`, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
-              logs.push({ type: 'TRAINING', message: `Shadow Training: Enhanced ${cheapest.label} for ${cheapest.cost.toLocaleString()} gold.`, timestamp: new Date().toISOString() });
+              logs.push({ type: 'TRAINING', message: `Shadow Training: Enhanced ${cheapest.label} for ${cheapest.cost.toFixed(2).replace('.', ',')} gold.`, timestamp: new Date().toISOString() });
             }
           }
         }
