@@ -292,25 +292,29 @@ export async function fetchMonstersGameData(
             const pvpSearchRes = await fetch(huntPageUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: pvpSearchPayload });
             const searchHtml = await pvpSearchRes.text();
             
-            const gegnerIdMatch = searchHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
-            const rivalNameMatch = searchHtml.match(/<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i) 
-                                || searchHtml.match(/gegnerid=\d+[^>]*>([^<]+)<\/a>/i)
-                                || searchHtml.match(/sac=info&amp;id=\d+[^>]*>([^<]+)<\/a>/i);
-            const rivalName = rivalNameMatch ? rivalNameMatch[1].trim() : 'Unknown Rival';
+            if (searchHtml.includes("no character matches") || searchHtml.includes("ningún personaje") || searchHtml.includes("nadie ha sido encontrado")) {
+              logs.push({ type: 'BATTLE', message: "PvP Ritual: No suitable rivals found in the shadows.", timestamp: new Date().toISOString() });
+            } else {
+              const gegnerIdMatch = searchHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
+              const rivalNameMatch = searchHtml.match(/<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i) 
+                                  || searchHtml.match(/gegnerid=\d+[^>]*>([^<]+)<\/a>/i)
+                                  || searchHtml.match(/sac=info&amp;id=\d+[^>]*>([^<]+)<\/a>/i);
+              const rivalName = rivalNameMatch ? rivalNameMatch[1].trim() : 'Unknown Rival';
 
-            if (gegnerIdMatch) {
-              const battleRes = await fetch(huntPageUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: new URLSearchParams({ ac: 'raubzug', sac: 'attack', gegnerid: gegnerIdMatch[1] }) });
-              const battleHtml = await battleRes.text();
-              const isWinner = (battleHtml.includes('headerRowCWinner') && battleHtml.includes(username)) || battleHtml.includes('ganado');
-              const loot = parseMGNumber(battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i)?.[1] || '0');
-              const battleExp = parseMGNumber(battleHtml.match(/([\d,.]+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia)/i)?.[1] || '0');
-              
-              pvpCooldown = parseInt(battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || "900");
-              logs.push({ 
-                type: 'BATTLE', 
-                message: `PvP Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs ${rivalName}. Loot: ${loot.toFixed(2)} gold, ${battleExp} XP.`, 
-                timestamp: new Date().toISOString() 
-              });
+              if (gegnerIdMatch) {
+                const battleRes = await fetch(huntPageUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: new URLSearchParams({ ac: 'raubzug', sac: 'attack', gegnerid: gegnerIdMatch[1] }) });
+                const battleHtml = await battleRes.text();
+                const isWinner = (battleHtml.includes('headerRowCWinner') && battleHtml.includes(username)) || battleHtml.includes('ganado');
+                const loot = parseMGNumber(battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i)?.[1] || '0');
+                const battleExp = parseMGNumber(battleHtml.match(/([\d,.]+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia)/i)?.[1] || '0');
+                
+                pvpCooldown = parseInt(battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || "900");
+                logs.push({ 
+                  type: 'BATTLE', 
+                  message: `PvP Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs ${rivalName}. Loot: ${loot.toFixed(2)} gold, ${battleExp} XP.`, 
+                  timestamp: new Date().toISOString() 
+                });
+              }
             }
           } else if (settings.auto_manhunt && !humanLimitReached) {
             const duration = parseInt(settings.manhunt_duration || '3600');
