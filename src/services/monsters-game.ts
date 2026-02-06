@@ -156,17 +156,19 @@ export async function fetchMonstersGameData(
     
     const acMatch = html.match(/var\s+ac\s*=\s*['"]([^'"]+)['"]/i);
     const currentAction = acMatch ? acMatch[1] : '';
-    const lowerHtml = html.toLowerCase();
-
-    // Refined Busy State Detection
-    const isWorking = pvpCooldown > 0 && (currentAction === 'friedhof' || lowerHtml.includes("trabajando"));
-    const isInMission = pvpCooldown > 0 && (currentAction === 'ahnenstaette' || lowerHtml.includes("en la misión") || lowerHtml.includes("en la mision"));
-    const isManhunting = pvpCooldown > 0 && (currentAction === 'raubzug' && (lowerHtml.includes("caza de humanos") || lowerHtml.includes("cazando")));
+    
+    // Busy State Detection using status page message box
+    const busyMessageBox = html.match(/class=["']pageContentC["'][^>]*>(.*?)<\/div>/si);
+    const busyMsgText = busyMessageBox ? busyMessageBox[1].toLowerCase() : "";
+    
+    const isWorking = pvpCooldown > 0 && (currentAction === 'friedhof' || busyMsgText.includes("trabajando") || busyMsgText.includes("work"));
+    const isInMission = pvpCooldown > 0 && (currentAction === 'ahnenstaette' || busyMsgText.includes("misión") || busyMsgText.includes("mision") || busyMsgText.includes("mission"));
+    const isManhunting = pvpCooldown > 0 && (currentAction === 'raubzug' || busyMsgText.includes("raid") || busyMsgText.includes("caza") || busyMsgText.includes("incursión") || busyMsgText.includes("incursion") || busyMsgText.includes("humanos"));
     const isBusy = isWorking || isInMission || isManhunting;
 
     if (isBusy || pvpCooldown > 0) {
       const timeLeft = formatDuration(pvpCooldown);
-      let busyMsg = `Shadow Vigil: Character is currently resting. Cooldown: ${timeLeft}.`;
+      let busyMsg = `Shadow Vigil: Character is currently resting. PvP Cooldown: ${timeLeft}.`;
       
       if (isWorking) {
         busyMsg = `Shadow Vigil: Character is currently working at the graveyard. Shift ends in ${timeLeft}.`;
