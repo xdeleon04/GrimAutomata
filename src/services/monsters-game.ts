@@ -78,6 +78,13 @@ export async function fetchMonstersGameData(
     }
   };
 
+  const POTIONS = [
+    { id: 8, cost: 891, name: 'Esencia de fortaleza (1000)' },
+    { id: 7, cost: 445, name: 'Esencia de fortaleza (500)' },
+    { id: 2, cost: 89, name: 'Esencia de fortaleza (100)' },
+    { id: 1, cost: 49, name: 'Esencia de fortaleza (50)' },
+  ];
+
   try {
     const cookies: Map<string, string> = new Map();
     const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
@@ -157,13 +164,14 @@ export async function fetchMonstersGameData(
     const secondsMatchStatus = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
     pvpCooldown = secondsMatchStatus ? parseInt(secondsMatchStatus[1]) : 0;
     
-    // Busy State Detection
+    // Improved busy state detection via status page content
     const busyMessageBox = html.match(/class=["']pageContentC["'][^>]*>(.*?)<\/div>/si);
     const busyMsgText = busyMessageBox ? busyMessageBox[1].toLowerCase() : "";
     
-    const isWorking = busyMsgText.includes("trabajando") || busyMsgText.includes("work");
-    const isInMission = busyMsgText.includes("misión") || busyMsgText.includes("mision") || busyMsgText.includes("mission");
-    const isManhunting = busyMsgText.includes("raid") || busyMsgText.includes("caza") || busyMsgText.includes("humanos");
+    // Check specific task keywords in Spanish and English
+    const isWorking = busyMsgText.includes("trabajando") || busyMsgText.includes("work") || busyMsgText.includes("friedhof") || busyMsgText.includes("cementerio");
+    const isInMission = busyMsgText.includes("misión") || busyMsgText.includes("mision") || busyMsgText.includes("mission") || busyMsgText.includes("grotto") || busyMsgText.includes("ahnenstaette");
+    const isManhunting = busyMsgText.includes("raid") || busyMsgText.includes("caza") || busyMsgText.includes("humanos") || busyMsgText.includes("raubzug");
     const isBusy = isWorking || isInMission || isManhunting || pvpCooldown > 0;
 
     if (isBusy) {
@@ -185,35 +193,65 @@ export async function fetchMonstersGameData(
       });
     }
 
-    // --- STEP 2: AUTOMATION RITUALS (ALCHMEY & WORK) ---
+    // --- STEP 2: AUTOMATION RITUALS (ALCHEMY & WORK) ---
     if (!isBusy) {
       // Alchemy Ritual: Auto-Use/Buy Consumables
       if (stamina <= thresholdValue && settings.auto_alchemy) {
-        logDebug(`[ALCHEMY] Stamina low (${stamina.toFixed(0)}). Checking for Esencia de fortaleza (500)...`);
+        const budget = parseInt(settings.potion_budget || '445');
+        logDebug(`[ALCHEMY] Stamina low (${stamina.toFixed(0)}). Budget: ${budget}. Gold: ${currentGold}.`);
         
-        // Check inventory for item_id 7
-        const hasPotion = html.includes('useitem=7');
+        // Find best potion in inventory or to buy
+        const targetPotion = POTIONS.find(p => p.cost <= budget && p.cost <= currentGold) || POTIONS[POTIONS.length - 1];
         
-        if (hasPotion) {
-          logDebug(`[ALCHEMY] Elixir found in inventory. Invoking restoration...`);
-          const useUrl = `https://${server}/index.php?ac=status&useitem=7`;
+        // Check inventory for any usable potion (prioritizing stronger ones)
+        const potionInInventory = POTIONS.find(p => html.includes(`useitem=${p.id}`));
+        
+        if (potionInInventory) {
+          logDebug(`[ALCHEMY] Elixir ${potionInInventory.name} found in inventory. Invoking restoration...`);
+          const useUrl = `https://${server}/index.php?ac=status&useitem=${potionInInventory.id}`;
           await fetch(useUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
-          logs.push({ type: 'LOOT', message: `Shadow Alchemy: Used Esencia de fortaleza (500) to restore vitality.`, timestamp: new Date().toISOString() });
+          logs.push({ type: 'LOOT', message: `Shadow Alchemy: Used ${potionInInventory.name} to restore vitality.`, timestamp: new Date().toISOString() });
           
           // Re-sync status
           statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
           html = await statusResponse.text();
-        } else if (currentGold >= 445) {
-          logDebug(`[ALCHEMY] Potion not found, but gold is available (445). Visiting the Shadow Merchant...`);
-          // Buy Esencia de fortaleza (500)
-          const buyUrl = `https://${server}/index.php?ac=stadt&sac=warenhaendler&action=buy&item_id=7&prod_group=4&currency=gold&sc=`;
-          await fetch(buyUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
+        } else if (currentGold >= targetPotion.cost) {
+          logDebug(`[ALCHEMY] Purchasing ${targetPotion.name} (Cost: ${targetPotion.cost})...`);
+          
+          // ES1 Merchant Form Data
+          const buyPayload = new URLSearchParams({
+            ac: 'stadt',
+            prod_group: '4',
+            item_id: targetPotion.id.toString(),
+            cur_price: targetPotion.cost.toString(),
+            bonus_gold: '',
+            server_amount: targetPotion.cost.toString(),
+            portal_amount: '0',
+            action: 'buy',
+            currency: 'gold',
+            upgrade_level: '0',
+            num_items: '1',
+            x: '172',
+            y: '30'
+          });
+
+          const traderUrl = `https://${server}/index.php?ac=stadt&sac=warenhaendler&waren=items&prod_group=4`;
+          await fetch(traderUrl, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/x-www-form-urlencoded', 
+              'Cookie': getCookieString(), 
+              'User-Agent': userAgent,
+              'Referer': traderUrl
+            },
+            body: buyPayload
+          });
           
           // Use it immediately
-          const useUrl = `https://${server}/index.php?ac=status&useitem=7`;
+          const useUrl = `https://${server}/index.php?ac=status&useitem=${targetPotion.id}`;
           await fetch(useUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
           
-          logs.push({ type: 'LOOT', message: `Shadow Alchemy: Purchased and used Esencia de fortaleza (500) from the merchant.`, timestamp: new Date().toISOString() });
+          logs.push({ type: 'LOOT', message: `Shadow Alchemy: Purchased and used ${targetPotion.name} from the merchant.`, timestamp: new Date().toISOString() });
           
           // Re-sync status
           statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
@@ -222,8 +260,8 @@ export async function fetchMonstersGameData(
       }
 
       // Re-calculate stamina after potential potion use
-      const newStaminaMatch = html.match(/Energía\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/si);
-      const currentStamina = parseMGNumber(newStaminaMatch ? newStaminaMatch[1] : stamina.toString());
+      const finalStaminaMatch = html.match(/Energía\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/si);
+      const currentStamina = parseMGNumber(finalStaminaMatch ? finalStaminaMatch[1] : stamina.toString());
 
       if (currentStamina <= thresholdValue) {
         if (settings.auto_work !== false) {
@@ -326,6 +364,7 @@ export async function fetchMonstersGameData(
           } else if (settings.auto_manhunt) {
             const durationMinutes = parseInt(settings.manhunt_duration || '60');
             const jagdzeitSeconds = durationMinutes * 60;
+            // Correct ES1 payload for Manhunt
             const mPayload = new URLSearchParams({ 
               ac: 'raubzug', 
               sac: race === 'Vampire' ? 'vampir' : 'wolf', 

@@ -1,4 +1,3 @@
-
 "use client"
 
 import React from 'react';
@@ -8,7 +7,6 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
 import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target, Search, Zap, Hammer, FlaskConical } from 'lucide-react';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
@@ -113,7 +111,10 @@ export function ConfigPanel() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="10">10 Minutes</SelectItem>
+                    <SelectItem value="20">20 Minutes</SelectItem>
                     <SelectItem value="30">30 Minutes</SelectItem>
+                    <SelectItem value="40">40 Minutes</SelectItem>
+                    <SelectItem value="50">50 Minutes</SelectItem>
                     <SelectItem value="60">60 Minutes</SelectItem>
                   </SelectContent>
                 </Select>
@@ -155,7 +156,7 @@ export function ConfigPanel() {
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Auto-Alchemy</Label>
-                  <p className="text-xs text-muted-foreground">Buy and use potions when stamina is low.</p>
+                  <p className="text-xs text-muted-foreground">Buy and use elixirs when vitality is low.</p>
                 </div>
                 <Switch 
                   checked={getSetting('auto_alchemy', false)} 
@@ -165,8 +166,8 @@ export function ConfigPanel() {
 
               <div className="space-y-4">
                 <div className="flex justify-between">
-                  <Label className="text-xs">Elixir Use Threshold</Label>
-                  <span className="text-xs text-accent">{getSetting('alchemy_threshold', 30)}% HP/Stamina</span>
+                  <Label className="text-xs">Vitality Use Threshold</Label>
+                  <span className="text-xs text-accent">{getSetting('alchemy_threshold', 30)}%</span>
                 </div>
                 <Slider 
                   value={[getSetting('alchemy_threshold', 30)]} 
@@ -175,22 +176,23 @@ export function ConfigPanel() {
                   className="py-2" 
                   onValueChange={(value) => updateSetting('alchemy_threshold', value[0])}
                 />
-                <p className="text-[10px] text-muted-foreground italic">Bot will visit the merchant if energy falls below this point.</p>
+                <p className="text-[10px] text-muted-foreground italic">Bot will attempt alchemy if energy falls below this point.</p>
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs">Max Potion Budget</Label>
                 <Select 
-                  value={getSetting('potion_budget', '1000')} 
+                  value={getSetting('potion_budget', '445')} 
                   onValueChange={(value) => updateSetting('potion_budget', value)}
                 >
                   <SelectTrigger className="h-8 bg-background/50">
                     <SelectValue placeholder="Select max price" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="500">500 Gold (Small)</SelectItem>
-                    <SelectItem value="1000">1,000 Gold (Medium)</SelectItem>
-                    <SelectItem value="5000">5,000 Gold (Large)</SelectItem>
+                    <SelectItem value="49">49 Gold (Smallest Restore)</SelectItem>
+                    <SelectItem value="89">89 Gold (Small Restore)</SelectItem>
+                    <SelectItem value="445">445 Gold (Medium Restore)</SelectItem>
+                    <SelectItem value="891">891 Gold (Large Restore)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
