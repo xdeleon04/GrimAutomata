@@ -144,7 +144,7 @@ export async function fetchMonstersGameData(
     const staminaMatch = html.match(/Energía\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/si)
                        || html.match(/Energía\s+vital:\s*([\d,.]+)/i);
     const stamina = parseMGNumber(staminaMatch ? staminaMatch[1] : "0");
-    const maxStamina = parseMGNumber(staminaMatch && staminaMatch[2] ? staminaMatch[2] : "780");
+    const maxStamina = parseMGNumber(staminaMatch && staminaMatch[2] ? staminaMatch[2] : "800");
     
     const staminaReservePercent = parseInt(settings.stamina_reserve || '10');
     const thresholdValue = (staminaReservePercent / 100) * maxStamina;
@@ -185,36 +185,39 @@ export async function fetchMonstersGameData(
       });
     }
 
-    // --- STEP 2: AUTOMATION RITUALS (POTIONS & WORK) ---
+    // --- STEP 2: AUTOMATION RITUALS (ALCHMEY & WORK) ---
     if (!isBusy) {
       // Alchemy Ritual: Auto-Use/Buy Consumables
       if (stamina <= thresholdValue && settings.auto_alchemy) {
-        logDebug(`[ALCHEMY] Stamina low (${stamina.toFixed(0)}). Checking for restorative elixirs...`);
+        logDebug(`[ALCHEMY] Stamina low (${stamina.toFixed(0)}). Checking for Esencia de fortaleza (500)...`);
         
-        // 1. Check inventory for existing potions
-        const hasPotion = html.includes('Potion') || html.includes('Poción') || html.includes('item_use');
+        // Check inventory for item_id 7
+        const hasPotion = html.includes('useitem=7');
         
         if (hasPotion) {
           logDebug(`[ALCHEMY] Elixir found in inventory. Invoking restoration...`);
-          // Note: Standard 'use' ac is usually handled by clicking the item ID in status/inventar
-          // We'll attempt a generic usage if we can find an ID, or skip if complex
-        } else if (currentGold >= 500) { // Base price check
-          logDebug(`[ALCHEMY] Gold available (${currentGold}). Visiting the Shadow Merchant...`);
-          const shopUrl = `https://${server}/index.php?ac=haendler`;
-          const shopRes = await fetch(shopUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
-          const shopHtml = await shopRes.text();
+          const useUrl = `https://${server}/index.php?ac=status&useitem=7`;
+          await fetch(useUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
+          logs.push({ type: 'LOOT', message: `Shadow Alchemy: Used Esencia de fortaleza (500) to restore vitality.`, timestamp: new Date().toISOString() });
           
-          // Attempt to buy the cheapest potion (usually health/stamina restoration)
-          const buyMatch = shopHtml.match(/index\.php\?ac=haendler&sac=buy&iid=(\d+)/i);
-          if (buyMatch) {
-            const buyUrl = `https://${server}/${buyMatch[0]}`;
-            await fetch(buyUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
-            logs.push({ type: 'LOOT', message: `Shadow Alchemy: Purchased restorative elixir from the merchant.`, timestamp: new Date().toISOString() });
-            
-            // Re-sync status to see if we can use it
-            statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
-            html = await statusResponse.text();
-          }
+          // Re-sync status
+          statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
+          html = await statusResponse.text();
+        } else if (currentGold >= 445) {
+          logDebug(`[ALCHEMY] Potion not found, but gold is available (445). Visiting the Shadow Merchant...`);
+          // Buy Esencia de fortaleza (500)
+          const buyUrl = `https://${server}/index.php?ac=stadt&sac=warenhaendler&action=buy&item_id=7&prod_group=4&currency=gold&sc=`;
+          await fetch(buyUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
+          
+          // Use it immediately
+          const useUrl = `https://${server}/index.php?ac=status&useitem=7`;
+          await fetch(useUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
+          
+          logs.push({ type: 'LOOT', message: `Shadow Alchemy: Purchased and used Esencia de fortaleza (500) from the merchant.`, timestamp: new Date().toISOString() });
+          
+          // Re-sync status
+          statusResponse = await fetch(statusUrl, { headers: { 'Cookie': getCookieString(), 'User-Agent': userAgent } });
+          html = await statusResponse.text();
         }
       }
 
@@ -224,6 +227,7 @@ export async function fetchMonstersGameData(
 
       if (currentStamina <= thresholdValue) {
         if (settings.auto_work !== false) {
+          // Rule: 10 stamina per hour
           const pointsNeeded = Math.max(0, thresholdValue - currentStamina + 10); 
           const hoursToWork = Math.min(12, Math.max(1, Math.ceil(pointsNeeded / 10))); 
           
@@ -322,7 +326,13 @@ export async function fetchMonstersGameData(
           } else if (settings.auto_manhunt) {
             const durationMinutes = parseInt(settings.manhunt_duration || '60');
             const jagdzeitSeconds = durationMinutes * 60;
-            const mPayload = new URLSearchParams({ ac: 'raubzug', sac: race === 'Vampire' ? 'vampir' : 'wolf', jagdzeit: jagdzeitSeconds.toString(), x: '194', y: '45' });
+            const mPayload = new URLSearchParams({ 
+              ac: 'raubzug', 
+              sac: race === 'Vampire' ? 'vampir' : 'wolf', 
+              jagdzeit: jagdzeitSeconds.toString(), 
+              x: '194', 
+              y: '45' 
+            });
             
             const mRes = await fetch(huntPageUrl, {
               method: 'POST',
