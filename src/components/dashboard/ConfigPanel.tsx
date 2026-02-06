@@ -9,7 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target, Search, Zap, Hammer } from 'lucide-react';
+import { Settings, Swords, BookOpen, Ghost, MapPin, Loader2, Target, Search, Zap, Hammer, FlaskConical } from 'lucide-react';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { collection, doc } from 'firebase/firestore';
@@ -81,8 +81,9 @@ export function ConfigPanel() {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="combat" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-muted/30">
+          <TabsList className="grid w-full grid-cols-5 bg-muted/30">
             <TabsTrigger value="combat" className="data-[state=active]:bg-primary"><Swords className="w-4 h-4" /></TabsTrigger>
+            <TabsTrigger value="alchemy" className="data-[state=active]:bg-primary"><FlaskConical className="w-4 h-4" /></TabsTrigger>
             <TabsTrigger value="growth" className="data-[state=active]:bg-primary"><BookOpen className="w-4 h-4" /></TabsTrigger>
             <TabsTrigger value="missions" className="data-[state=active]:bg-primary"><MapPin className="w-4 h-4" /></TabsTrigger>
             <TabsTrigger value="behavior" className="data-[state=active]:bg-primary"><Ghost className="w-4 h-4" /></TabsTrigger>
@@ -111,10 +112,9 @@ export function ConfigPanel() {
                     <SelectValue placeholder="Select duration" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="10">10 Minutes (Min)</SelectItem>
+                    <SelectItem value="10">10 Minutes</SelectItem>
                     <SelectItem value="30">30 Minutes</SelectItem>
                     <SelectItem value="60">60 Minutes</SelectItem>
-                    <SelectItem value="120">120 Minutes (Max)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -143,22 +143,56 @@ export function ConfigPanel() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Normal Search</SelectItem>
-                    <SelectItem value="17">Stronger or Equal Rivals</SelectItem>
+                    <SelectItem value="17">Stronger Rivals</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="alchemy" className="space-y-6 pt-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Auto-Alchemy</Label>
+                  <p className="text-xs text-muted-foreground">Buy and use potions when stamina is low.</p>
+                </div>
+                <Switch 
+                  checked={getSetting('auto_alchemy', false)} 
+                  onCheckedChange={(checked) => updateSetting('auto_alchemy', checked)}
+                />
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between">
+                  <Label className="text-xs">Elixir Use Threshold</Label>
+                  <span className="text-xs text-accent">{getSetting('alchemy_threshold', 30)}% HP/Stamina</span>
+                </div>
+                <Slider 
+                  value={[getSetting('alchemy_threshold', 30)]} 
+                  max={90} 
+                  step={1} 
+                  className="py-2" 
+                  onValueChange={(value) => updateSetting('alchemy_threshold', value[0])}
+                />
+                <p className="text-[10px] text-muted-foreground italic">Bot will visit the merchant if energy falls below this point.</p>
+              </div>
 
               <div className="space-y-2">
-                <Label className="text-xs flex items-center gap-2">
-                  <Target className="w-3 h-3" /> Specific Target Name
-                </Label>
-                <Input 
-                  placeholder="Enter Rival Name"
-                  value={getSetting('pvp_target_name', '')}
-                  onChange={(e) => updateSetting('pvp_target_name', e.target.value)}
-                  className="h-8 bg-background/50 text-xs"
-                />
-                <p className="text-[10px] text-muted-foreground italic">Leave empty for random district hunts.</p>
+                <Label className="text-xs">Max Potion Budget</Label>
+                <Select 
+                  value={getSetting('potion_budget', '1000')} 
+                  onValueChange={(value) => updateSetting('potion_budget', value)}
+                >
+                  <SelectTrigger className="h-8 bg-background/50">
+                    <SelectValue placeholder="Select max price" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="500">500 Gold (Small)</SelectItem>
+                    <SelectItem value="1000">1,000 Gold (Medium)</SelectItem>
+                    <SelectItem value="5000">5,000 Gold (Large)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </TabsContent>
@@ -220,20 +254,6 @@ export function ConfigPanel() {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <Label className="text-xs">HP Retreat Threshold</Label>
-                <span className="text-xs text-accent">{getSetting('hp_retreat', 50)}% HP</span>
-              </div>
-              <Slider 
-                defaultValue={[getSetting('hp_retreat', 50)]} 
-                max={90} 
-                step={1} 
-                className="py-2" 
-                onValueCommit={(value) => updateSetting('hp_retreat', value[0])}
-              />
-            </div>
           </TabsContent>
 
           <TabsContent value="behavior" className="space-y-6 pt-4">
@@ -262,28 +282,6 @@ export function ConfigPanel() {
               <Switch 
                 checked={getSetting('auto_work', true)} 
                 onCheckedChange={(checked) => updateSetting('auto_work', checked)}
-              />
-            </div>
-
-            <div className="flex items-center justify-between border-t pt-4">
-              <div className="space-y-0.5">
-                <Label>Shadow Stealth</Label>
-                <p className="text-xs text-muted-foreground">Anti-detection delays between rituals.</p>
-              </div>
-              <Switch 
-                checked={getSetting('stealth_mode', true)} 
-                onCheckedChange={(checked) => updateSetting('stealth_mode', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>Auto-Repair Gear</Label>
-                <p className="text-xs text-muted-foreground">Repair items when durability is low.</p>
-              </div>
-              <Switch 
-                checked={getSetting('auto_repair', true)} 
-                onCheckedChange={(checked) => updateSetting('auto_repair', checked)}
               />
             </div>
           </TabsContent>
