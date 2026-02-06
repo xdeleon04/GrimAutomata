@@ -2,11 +2,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { StatusHeader } from '@/components/dashboard/StatusHeader';
-import { ActivityLog } from '@/components/dashboard/ActivityLog';
-import { ConfigPanel } from '@/components/dashboard/ConfigPanel';
-import { CredentialManager } from '@/components/dashboard/CredentialManager';
-import { QuickStats } from '@/components/dashboard/QuickStats';
+import { Dashboard } from '@/components/dashboard/Dashboard';
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -92,21 +88,7 @@ export default function Home() {
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
-        return (
-          <>
-            <StatusHeader />
-            <QuickStats />
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-              <div className="xl:col-span-1 space-y-6 flex flex-col">
-                <ConfigPanel />
-                <CredentialManager />
-              </div>
-              <div className="xl:col-span-2 h-full">
-                <ActivityLog />
-              </div>
-            </div>
-          </>
-        );
+        return <Dashboard />;
       case 'profile':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
@@ -135,21 +117,18 @@ export default function Home() {
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
             <h1 className="text-3xl font-headline text-accent">Ritual Core</h1>
-            <ConfigPanel />
           </div>
         );
       case 'chronicles':
         return (
           <div className="space-y-6 h-[calc(100vh-180px)] animate-in fade-in slide-in-from-bottom-4">
             <h1 className="text-3xl font-headline text-accent">Chronicles</h1>
-            <ActivityLog />
           </div>
         );
       case 'vault':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
             <h1 className="text-3xl font-headline text-accent">Vault Storage</h1>
-            <CredentialManager />
           </div>
         );
     }
