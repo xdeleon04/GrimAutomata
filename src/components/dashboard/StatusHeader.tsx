@@ -21,6 +21,7 @@ export function StatusHeader() {
   const lastSyncRef = useRef<number>(0);
   const isSyncingRef = useRef<boolean>(false);
   const cooldownRef = useRef<number>(0);
+  const initialSyncRequiredRef = useRef<boolean>(false);
 
   const credentialRef = useMemoFirebase(() => {
     if (!db || !user) return null;
@@ -96,13 +97,11 @@ export function StatusHeader() {
         }, { merge: true });
       });
 
-      // If we performed an action and aren't in cooldown, we might want another sync soon
       const performedAction = result.logs.some(l => 
         l.type === 'BATTLE' || l.type === 'MANHUNT' || l.type === 'MISSION'
       );
       
       if (performedAction && result.pvpCooldown === 0) {
-        // Schedule a follow-up sync if we just did something and no cooldown appeared
         setTimeout(() => {
           if (isRunning) triggerSync();
         }, 5000);
@@ -119,13 +118,9 @@ export function StatusHeader() {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRunning) {
-      // Reset refs on start
-      lastSyncRef.current = 0; 
-      
       interval = setInterval(() => {
         setUptime(prev => prev + 1);
         
-        // Count down the cooldown in real-time
         let currentCooldown = 0;
         setCooldown(prev => {
           currentCooldown = Math.max(0, prev - 1);
@@ -136,19 +131,12 @@ export function StatusHeader() {
         const now = Date.now();
         const secondsSinceLastSync = lastSyncRef.current === 0 ? Infinity : (now - lastSyncRef.current) / 1000;
         
-        /**
-         * SMART SYNC LOGIC:
-         * 1. If cooldown was active and just reached zero: SYNC IMMEDIATELY.
-         * 2. If no cooldown is active: Sync every 60 seconds (heartbeat for stamina/stats).
-         * 3. Safety fallback: Sync every 5 minutes regardless of cooldown.
-         */
         const justFinishedCooldown = cooldownRef.current === 0 && secondsSinceLastSync > 1 && secondsSinceLastSync < 60 && lastSyncRef.current !== 0; 
-        // Note: cooldownRef.current is updated by the setCooldown functional update above
-        
         const regularHeartbeat = cooldownRef.current === 0 && secondsSinceLastSync >= 60;
-        const initialSync = lastSyncRef.current === 0;
+        const initialSync = initialSyncRequiredRef.current || lastSyncRef.current === 0;
 
         if ((initialSync || justFinishedCooldown || regularHeartbeat) && !isSyncingRef.current) {
+          initialSyncRequiredRef.current = false;
           triggerSync();
         }
       }, 1000);
@@ -157,6 +145,7 @@ export function StatusHeader() {
       setCooldown(0);
       cooldownRef.current = 0;
       lastSyncRef.current = 0;
+      initialSyncRequiredRef.current = false;
     }
     return () => clearInterval(interval);
   }, [isRunning, triggerSync]);
@@ -169,7 +158,13 @@ export function StatusHeader() {
   };
 
   const handleToggle = () => {
-    setIsRunning(!isRunning);
+    const nextState = !isRunning;
+    if (nextState) {
+      initialSyncRequiredRef.current = true;
+      lastSyncRef.current = 0;
+      isSyncingRef.current = false;
+    }
+    setIsRunning(nextState);
   };
 
   return (
