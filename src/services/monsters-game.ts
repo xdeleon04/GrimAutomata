@@ -269,15 +269,15 @@ export async function fetchMonstersGameData(
         if (huntHtml.includes("Resultado de la caza") || huntHtml.includes("Resultado")) {
           const bloodMatch = huntHtml.match(/(\d+)\s+litros\s+de\s+sangre/i);
           const huntGoldMatch = huntHtml.match(/([\d,.]+)\s+<img[^>]+alt=["']Oro["']/i);
-          const huntExpMatch = huntHtml.match(/(\d+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia)/i);
+          const huntExpMatch = huntHtml.match(/(\d+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia|experience)/i);
           
           if (bloodMatch || huntGoldMatch || huntExpMatch) {
             const blood = bloodMatch ? bloodMatch[1] : '0';
-            const gold = parseMGNumber(huntGoldMatch ? huntGoldMatch[1] : '0');
-            const exp = huntExpMatch ? huntExpMatch[1] : '0';
+            const goldVal = parseMGNumber(huntGoldMatch ? huntGoldMatch[1] : '0');
+            const expVal = parseMGNumber(huntExpMatch ? huntExpMatch[1] : '0');
             logs.push({ 
               type: 'MANHUNT', 
-              message: `Manhunt Harvest: Collected ${blood} liters of blood, ${gold.toFixed(2)} gold, and ${exp} XP.`, 
+              message: `Manhunt Harvest: Collected ${blood} liters of blood, ${goldVal.toFixed(2)} gold, and ${expVal} XP.`, 
               timestamp: new Date().toISOString() 
             });
           } else if (huntHtml.includes("nothing to be found") || huntHtml.includes("nada que encontrar")) {
@@ -288,30 +288,49 @@ export async function fetchMonstersGameData(
         if (pvpCooldown <= 0) {
           const humanLimitReached = huntHtml.includes("used all of today's hunting time") || huntHtml.includes("ya has usado todo tu tiempo de caza");
           if (humanLimitReached && settings.pvp_attack) {
-            const pvpSearchPayload = new URLSearchParams({ ac: 'raubzug', sac: 'gegner', searchname: settings.pvp_target_name || '', searchopt: settings.pvp_search_strategy === 'none' ? '' : (settings.pvp_search_strategy || '') });
-            const pvpSearchRes = await fetch(huntPageUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: pvpSearchPayload });
+            const pvpSearchPayload = new URLSearchParams({ 
+              ac: 'raubzug', 
+              sac: 'gegner', 
+              searchname: settings.pvp_target_name || '', 
+              searchopt: settings.pvp_search_strategy === 'none' ? '' : (settings.pvp_search_strategy || '') 
+            });
+            const pvpSearchRes = await fetch(huntPageUrl, { 
+              method: 'POST', 
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, 
+              body: pvpSearchPayload 
+            });
             const searchHtml = await pvpSearchRes.text();
             
             if (searchHtml.includes("no character matches") || searchHtml.includes("ningún personaje") || searchHtml.includes("nadie ha sido encontrado")) {
               logs.push({ type: 'BATTLE', message: "PvP Ritual: No suitable rivals found in the shadows.", timestamp: new Date().toISOString() });
             } else {
               const gegnerIdMatch = searchHtml.match(/name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i);
-              const rivalNameMatch = searchHtml.match(/<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i) 
-                                  || searchHtml.match(/gegnerid=\d+[^>]*>([^<]+)<\/a>/i)
-                                  || searchHtml.match(/sac=info&amp;id=\d+[^>]*>([^<]+)<\/a>/i);
-              const rivalName = rivalNameMatch ? rivalNameMatch[1].trim() : 'Unknown Rival';
+              const rivalNameMatch = searchHtml.match(/sac=info&amp;id=\d+[^>]*>([^<]+)<\/a>/i) 
+                                  || searchHtml.match(/<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i);
+              const initialRivalName = rivalNameMatch ? rivalNameMatch[1].trim() : 'Unknown Rival';
 
               if (gegnerIdMatch) {
-                const battleRes = await fetch(huntPageUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, body: new URLSearchParams({ ac: 'raubzug', sac: 'attack', gegnerid: gegnerIdMatch[1] }) });
+                const battleRes = await fetch(huntPageUrl, { 
+                  method: 'POST', 
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': getCookieString(), 'User-Agent': userAgent }, 
+                  body: new URLSearchParams({ ac: 'raubzug', sac: 'attack', gegnerid: gegnerIdMatch[1] }) 
+                });
                 const battleHtml = await battleRes.text();
-                const isWinner = (battleHtml.includes('headerRowCWinner') && battleHtml.includes(username)) || battleHtml.includes('ganado');
-                const loot = parseMGNumber(battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i)?.[1] || '0');
-                const battleExp = parseMGNumber(battleHtml.match(/([\d,.]+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia)/i)?.[1] || '0');
+                
+                // Refined Rival Name and Results Parsing for ES1
+                const finalRivalNameMatch = battleHtml.match(/<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i)
+                                         || battleHtml.match(/sac=info&amp;id=\d+[^>]*>([^<]+)<\/a>/i);
+                const finalRivalName = finalRivalNameMatch ? finalRivalNameMatch[1].trim() : initialRivalName;
+                
+                const isWinner = battleHtml.includes('headerRowCWinner') || battleHtml.includes('ganado');
+                const lootVal = parseMGNumber(battleHtml.match(/Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i)?.[1] || '0');
+                const battleExpMatch = battleHtml.match(/([\d,.]+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia|puntos\s+de\s+exp|experience)/i);
+                const battleExpVal = parseMGNumber(battleExpMatch ? battleExpMatch[1] : '0');
                 
                 pvpCooldown = parseInt(battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || "900");
                 logs.push({ 
                   type: 'BATTLE', 
-                  message: `PvP Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs ${rivalName}. Loot: ${loot.toFixed(2)} gold, ${battleExp} XP.`, 
+                  message: `PvP Ritual: ${isWinner ? 'VICTORY' : 'DEFEAT'} vs ${finalRivalName}. Loot: ${lootVal.toFixed(2)} gold, ${battleExpVal} XP.`, 
                   timestamp: new Date().toISOString() 
                 });
               }
