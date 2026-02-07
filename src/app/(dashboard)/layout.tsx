@@ -9,6 +9,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import {
   Ghost,
@@ -21,6 +22,7 @@ import {
   LayoutDashboard,
   ExternalLink,
   Crosshair,
+  PanelLeft,
 } from "lucide-react";
 import { useUser, useFirestore, setDocumentNonBlocking } from "@/firebase";
 import { Button } from "@/components/ui/button";
@@ -124,7 +126,11 @@ export default function DashboardLayout({
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
                       asChild
-                      isActive={pathname === item.href}
+                      isActive={
+                        item.href === "/"
+                          ? pathname === "/"
+                          : pathname.startsWith(item.href)
+                      }
                       className="py-6"
                     >
                       <Link href={item.href}>
@@ -162,6 +168,11 @@ export default function DashboardLayout({
           </Sidebar>
 
           <main className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-6">
+            <div className="lg:hidden">
+              <SidebarTrigger className="text-accent hover:text-accent/80">
+                <PanelLeft className="w-5 h-5" />
+              </SidebarTrigger>
+            </div>
             {children}
             <footer className="text-center py-4 text-[10px] text-muted-foreground/40 font-mono tracking-tighter uppercase">
               GRIMAUTOMATA v4.2.0-DARKEST_BLOOD // SERVER_ES1_BOUND //
