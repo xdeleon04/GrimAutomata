@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Users, Swords, Coins, TrendingUp, RefreshCw, Loader2 } from "lucide-react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 
 import { usePvPVictories, useCredentials } from "@/components/dashboard/DashboardDataProvider";
 import { useUser, useFirestore } from "@/firebase";
@@ -76,73 +76,88 @@ export default function PvPOverview() {
     setSyncStatus(null);
 
     try {
-      // 1. Fetch synced meta
-      const syncMetaRef = doc(db, "users", user.uid, "pvpVictories", "_syncMeta");
-      const syncMetaSnap = await getDoc(syncMetaRef);
-      const syncedFightIds = new Set<string>(syncMetaSnap.exists() ? syncMetaSnap.data()?.syncedFightIds || [] : []);
-
-      // 2. Scrape data
+      // 1. Scrape all battles from messages
       const scrapedBattles = await scrapePvpHistory(
         credentialsDoc.moonIdUsername,
         credentialsDoc.encryptedMoonIdPassword,
         credentialsDoc.description
       );
 
-      // 3. Filter new battles
-      const newBattles = scrapedBattles.filter(b => !syncedFightIds.has(b.fightId));
-
-      if (newBattles.length === 0) {
-        setSyncStatus("No new battles found in recent messages.");
+      if (scrapedBattles.length === 0) {
+        setSyncStatus("No battles found in recent messages.");
         setIsSyncing(false);
         return;
       }
 
-      // 4. Update Firestore for each new battle using non-blocking writes
-      let newOpponentsCount = 0;
-      const rivalsUpdated = new Set<string>();
+      // 2. Group scraped battles by rival
+      const battlesByRival = new Map<string, typeof scrapedBattles>();
+      for (const battle of scrapedBattles) {
+        const existing = battlesByRival.get(battle.rivalGameId) || [];
+        existing.push(battle);
+        battlesByRival.set(battle.rivalGameId, existing);
+      }
 
-      for (const battle of newBattles) {
-        const rivalDocRef = doc(db, "users", user.uid, "pvpVictories", battle.rivalGameId);
+      // 3. For each rival, check Firestore for already-synced fightIds
+      let totalNew = 0;
+      let rivalsUpdated = 0;
 
-        // We need to read the current state to merge correctly
-        // Note: In a high-concurrency scenario, this read-then-write might race, but for a single user client it's acceptable
+      for (const [rivalGameId, battles] of battlesByRival) {
+        const rivalDocRef = doc(db, "users", user.uid, "pvpVictories", rivalGameId);
         const existingSnap = await getDoc(rivalDocRef);
         const existingData = existingSnap.exists() ? existingSnap.data() : null;
 
-        if (!existingSnap.exists()) {
-          newOpponentsCount++;
-        }
-        rivalsUpdated.add(battle.rivalGameId);
+        // Get the set of already-synced fight IDs from this rival's doc
+        const alreadySynced = new Set<string>(existingData?.syncedFightIds || []);
+        const updatedFightIds = new Set<string>(alreadySynced);
 
+        // Filter to only truly new battles
+        const newBattles = battles.filter(b => !alreadySynced.has(b.fightId));
+
+        if (newBattles.length === 0) continue;
+
+        // Aggregate new stats
+        let newWins = 0;
+        let newLosses = 0;
+        let newGold = 0;
+        let newXp = 0;
+
+        for (const battle of newBattles) {
+          if (battle.isWinner) newWins++;
+          else newLosses++;
+          newGold += battle.goldLooted;
+          newXp += battle.xpEarned;
+          updatedFightIds.add(battle.fightId);
+        }
+
+        const lastBattle = newBattles[newBattles.length - 1];
         const updates = {
-          id: battle.rivalGameId,
-          rivalName: battle.rivalName,
-          rivalGameId: battle.rivalGameId,
-          rivalRace: battle.rivalRace || existingData?.rivalRace || "",
-          wins: (existingData?.wins || 0) + (battle.isWinner ? 1 : 0),
-          losses: (existingData?.losses || 0) + (battle.isWinner ? 0 : 1),
-          totalGoldLooted: (existingData?.totalGoldLooted || 0) + battle.goldLooted,
-          totalXpEarned: (existingData?.totalXpEarned || 0) + battle.xpEarned,
-          lastBattleDate: battle.timestamp, // Assuming latest; could act smarter here but naive for now
-          lastResult: battle.isWinner ? "WIN" : "LOSS",
+          id: rivalGameId,
+          rivalName: lastBattle.rivalName,
+          rivalGameId: rivalGameId,
+          rivalRace: lastBattle.rivalRace || existingData?.rivalRace || "",
+          wins: (existingData?.wins || 0) + newWins,
+          losses: (existingData?.losses || 0) + newLosses,
+          totalGoldLooted: (existingData?.totalGoldLooted || 0) + newGold,
+          totalXpEarned: (existingData?.totalXpEarned || 0) + newXp,
+          lastBattleDate: lastBattle.timestamp,
+          lastResult: lastBattle.isWinner ? "WIN" : "LOSS",
+          syncedFightIds: Array.from(updatedFightIds),
         };
 
         setDocumentNonBlocking(rivalDocRef, updates, { merge: true });
-        syncedFightIds.add(battle.fightId);
+        totalNew += newBattles.length;
+        rivalsUpdated++;
       }
 
-      // 5. Update sync meta
-      // We use setDoc here to await completion ensuring the IDs are saved before we say "Done"
-      await setDoc(syncMetaRef, {
-        syncedFightIds: Array.from(syncedFightIds)
-      }, { merge: true });
-
-      setSyncStatus(`Synced ${newBattles.length} new battles from ${rivalsUpdated.size} opponents.`);
-      toast({
-        title: "Sync Complete",
-        description: `Added ${newBattles.length} battles.`,
-      });
-
+      if (totalNew === 0) {
+        setSyncStatus("No new battles found in recent messages.");
+      } else {
+        setSyncStatus(`Synced ${totalNew} new battles from ${rivalsUpdated} opponents.`);
+        toast({
+          title: "Sync Complete",
+          description: `Added ${totalNew} battles.`,
+        });
+      }
     } catch (error) {
       console.error("PvP Sync Error:", error);
       toast({

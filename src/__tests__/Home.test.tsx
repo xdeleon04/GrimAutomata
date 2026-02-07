@@ -65,6 +65,12 @@ jest.mock("next/navigation", () => ({
   useRouter: jest.fn(() => ({ push: jest.fn() })),
 }));
 
+jest.mock("next/link", () => {
+  const MockLink = ({ children, ...props }: any) => <a {...props}>{children}</a>;
+  MockLink.displayName = "MockLink";
+  return { __esModule: true, default: MockLink };
+});
+
 jest.mock("@/components/ui/sidebar", () => {
   const passthrough = ({ children }: { children?: any }) => (
     <div>{children}</div>
@@ -74,6 +80,7 @@ jest.mock("@/components/ui/sidebar", () => {
     Sidebar: passthrough,
     SidebarContent: passthrough,
     SidebarHeader: passthrough,
+    SidebarTrigger: passthrough,
     SidebarMenu: passthrough,
     SidebarMenuItem: passthrough,
     SidebarMenuButton: ({ children }: { children?: any }) => (
