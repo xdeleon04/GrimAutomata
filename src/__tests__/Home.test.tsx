@@ -92,6 +92,7 @@ jest.mock("@/components/dashboard/DashboardDataProvider", () => {
     useCredentials: jest.fn(() => ({ data: null, isLoading: false })),
     useAutomationSettings: jest.fn(() => ({ data: null, isLoading: false })),
     useActivityLogs: jest.fn(() => ({ data: null, isLoading: false })),
+    usePvPVictories: jest.fn(() => ({ data: [], isLoading: false })),
   };
 });
 

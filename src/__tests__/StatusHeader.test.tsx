@@ -62,6 +62,7 @@ jest.mock("@/components/dashboard/DashboardDataProvider", () => ({
   })),
   useUserProfile: jest.fn(() => ({ data: null, isLoading: false })),
   useActivityLogs: jest.fn(() => ({ data: [], isLoading: false })),
+  usePvPVictories: jest.fn(() => ({ data: [], isLoading: false })),
   DashboardDataProvider: ({ children }: { children: any }) => (
     <div>{children}</div>
   ),

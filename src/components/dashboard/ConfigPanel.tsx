@@ -30,6 +30,7 @@ import {
   Zap,
   Hammer,
   FlaskConical,
+  ListOrdered,
 } from "lucide-react";
 import { useUser, useFirestore } from "@/firebase";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
@@ -205,7 +206,31 @@ export function ConfigPanel() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="flex items-center justify-between border-t pt-4">
+                <div className="space-y-0.5">
+                  <Label className="flex items-center gap-2">
+                    <ListOrdered className="w-3 h-3" /> Manual PvP: Win List
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Attack known rivals from your Shadow Marks instead of
+                    searching.
+                  </p>
+                </div>
+                <Switch
+                  checked={getSetting("manual_pvp", false)}
+                  onCheckedChange={(checked) =>
+                    updateSetting("manual_pvp", checked)
+                  }
+                />
+              </div>
+
+              <div
+                className={`space-y-2 ${
+                  getSetting("manual_pvp", false)
+                    ? "opacity-50 pointer-events-none"
+                    : ""
+                }`}
+              >
                 <Label className="text-xs flex items-center gap-2">
                   <Search className="w-3 h-3" /> Search Strategy
                 </Label>

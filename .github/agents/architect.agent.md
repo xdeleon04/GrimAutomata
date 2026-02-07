@@ -21,7 +21,7 @@ Before delegating ANY task, ask: **"Is the primary goal changing what the user S
 
 If you delegate to the Designer, you must have the Coder review the changes for technical correctness after the Designer completes.
 
-Use #context7 MCP Server to read relevant documentation. Do this every time you are working with a language, framework, library etc. Never assume that you know the answer as these things change frequently. Your training date is in the past so your knowledge is likely out of date, even if it is a technology you are familiar with.
+Use #context7 MCP Server to read relevant documentation and your skills. Do this every time you are working with a language, framework, library etc. Never assume that you know the answer as these things change frequently. Your training date is in the past so your knowledge is likely out of date, even if it is a technology you are familiar with.
 
 Your context window is limited - especially the output, so you must ALWAYS use #runSubagent to do any work. Avoid doing anything on the main thread except for delegation and orchestration.
 
