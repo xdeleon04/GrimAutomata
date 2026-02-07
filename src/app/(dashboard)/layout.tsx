@@ -20,6 +20,7 @@ import {
   LogIn,
   LayoutDashboard,
   ExternalLink,
+  Crosshair,
 } from "lucide-react";
 import { useUser, useFirestore, setDocumentNonBlocking } from "@/firebase";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,7 @@ export default function DashboardLayout({
     { href: "/profile", label: "Shadow Profile", icon: UserIcon },
     { href: "/rituals", label: "Ritual Core", icon: Settings },
     { href: "/chronicles", label: "Chronicles", icon: History },
+    { href: "/pvp", label: "Shadow Marks", icon: Crosshair },
     { href: "/vault", label: "Vault Storage", icon: Lock },
   ];
 
