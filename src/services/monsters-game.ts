@@ -78,6 +78,34 @@ function formatDuration(seconds: number): string {
 }
 
 /**
+ * Parses actual remaining time from page text.
+ * Handles patterns like:
+ * - "In 9 minutes" / "En 9 minutos"
+ * - "every 15 minutes" / "cada 15 minutos"
+ * - "X hours" / "X horas"
+ * Returns seconds, or null if no text-based time found.
+ */
+function parseTimeFromText(html: string): number | null {
+  const combinedMatch = html.match(
+    /(?:In|En)\s+(\d+)\s+(?:hours?|horas?)\s+(?:and|y|,)\s+(\d+)\s+(?:minutes?|minutos?)/i,
+  );
+  if (combinedMatch)
+    return parseInt(combinedMatch[1]) * 3600 + parseInt(combinedMatch[2]) * 60;
+
+  const hoursMatch = html.match(
+    /(?:In|En)\s+(\d+)\s+(?:hours?|horas?)/i,
+  );
+  if (hoursMatch) return parseInt(hoursMatch[1]) * 3600;
+
+  const minutesMatch = html.match(
+    /(?:In|En)\s+(\d+)\s+(?:minutes?|minutos?)/i,
+  );
+  if (minutesMatch) return parseInt(minutesMatch[1]) * 60;
+
+  return null;
+}
+
+/**
  * Executes active rituals (automations) and fetches real data from the MonstersGame server.
  */
 export async function fetchMonstersGameData(
@@ -355,10 +383,13 @@ export async function fetchMonstersGameData(
           body: workPayload,
         });
         const workHtml = await workRes.text();
-        pvpCooldown = parseInt(
-          workHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
-            (hoursToWork * 3600).toString(),
-        );
+        const textCooldownWork = parseTimeFromText(workHtml);
+        pvpCooldown =
+          textCooldownWork ??
+          parseInt(
+            workHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
+              (hoursToWork * 3600).toString(),
+          );
         logs.push({
           type: "INFO",
           message: `Shadow Ritual: Graveyard shift started for ${hoursToWork}h. Earning gold while resting.`,
@@ -440,7 +471,7 @@ export async function fetchMonstersGameData(
               logs.push({
                 type: "BATTLE",
                 message:
-                  "PvP Ritual: No suitable rivals found in the district.",
+                  "PvP Ritual: Rival eluded our sight. Try increasing Dexterity or retry next cycle.",
                 timestamp: new Date().toISOString(),
               });
             } else {
@@ -495,10 +526,14 @@ export async function fetchMonstersGameData(
                   )?.[1] || "0",
                 );
 
-                pvpCooldown = parseInt(
-                  battleHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
-                    "900",
-                );
+                const textCooldownPvP = parseTimeFromText(battleHtml);
+                pvpCooldown =
+                  textCooldownPvP ??
+                  parseInt(
+                    battleHtml.match(
+                      /var\s+SecondsCOUNTER\s*=\s*(\d+);/i,
+                    )?.[1] || "900",
+                  );
                 logs.push({
                   type: "BATTLE",
                   message: `PvP Ritual: ${isWinner ? "VICTORY" : "DEFEAT"} vs ${rivalName}. Loot: ${lootVal.toFixed(2)} gold, ${expVal} XP.`,
@@ -535,10 +570,13 @@ export async function fetchMonstersGameData(
               body: mPayload,
             });
             const mHtml = await mRes.text();
-            pvpCooldown = parseInt(
-              mHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
-                seconds.toString(),
-            );
+            const textCooldown = parseTimeFromText(mHtml);
+            pvpCooldown =
+              textCooldown ??
+              parseInt(
+                mHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
+                  seconds.toString(),
+              );
             logs.push({
               type: "MANHUNT",
               message: `Manhunt Ritual: Tracking humans for ${minutes}m. Blood shall flow.`,
@@ -645,6 +683,80 @@ export async function fetchMonstersGameData(
     const finalMaxStamina = parseMGNumber(
       finalStaminaMatch && finalStaminaMatch[2] ? finalStaminaMatch[2] : "800",
     );
+
+    // --- STEP 3: SCRAPE PVP HISTORY FROM MESSAGES ---
+    try {
+      const messagesUrl = `https://${server}/index.php?ac=nachrichten&sac=angriff`;
+      const msgRes = await fetch(messagesUrl, {
+        headers: { Cookie: getCookieString(), "User-Agent": userAgent },
+      });
+      const msgHtml = await msgRes.text();
+
+      const fightIdRegex =
+        /ac=fightreport&(?:amp;)?fightid=(\d+)&(?:amp;)?sac=angriff/gi;
+      const fightIds: string[] = [];
+      let fightMatch;
+      while ((fightMatch = fightIdRegex.exec(msgHtml)) !== null) {
+        if (!fightIds.includes(fightMatch[1])) {
+          fightIds.push(fightMatch[1]);
+        }
+      }
+
+      const reportsToFetch = fightIds.slice(0, 10);
+      for (const fightId of reportsToFetch) {
+        try {
+          const reportUrl = `https://${server}/index.php?ac=fightreport&fightid=${fightId}&sac=angriff`;
+          const reportRes = await fetch(reportUrl, {
+            headers: { Cookie: getCookieString(), "User-Agent": userAgent },
+          });
+          const reportHtml = await reportRes.text();
+
+          const reportRivalName = reportHtml
+            .match(/sac=info&(?:amp;)?id=\d+[^>]*>([^<]+)<\/a>/i)?.[1]
+            ?.trim();
+          const reportRivalId = reportHtml.match(
+            /sac=info&(?:amp;)?id=(\d+)/i,
+          )?.[1];
+          const reportIsWinner =
+            reportHtml.includes("headerRowCWinner") ||
+            reportHtml.includes("ganado");
+          const reportGold = parseMGNumber(
+            reportHtml.match(
+              /Ha conseguido ([\d,.]+)\s*<img[^>]+alt=["']Oro["']/i,
+            )?.[1] || "0",
+          );
+          const reportXp = parseMGNumber(
+            reportHtml.match(
+              /([\d,.]+)\s+(?:experience\s+points|punto\(?s?\)?\s+de\s+experiencia|puntos\s+de\s+experiencia|experiencia|puntos\s+de\s+exp|experience)/i,
+            )?.[1] || "0",
+          );
+          const reportRivalRace = reportHtml.match(
+            /<div class="headerRow[^"]*">(Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)/i,
+          )?.[1];
+
+          if (reportRivalName && reportRivalId) {
+            const alreadyRecorded = pvpResults.some(
+              (r) => r.rivalGameId === reportRivalId,
+            );
+            if (!alreadyRecorded) {
+              pvpResults.push({
+                rivalName: reportRivalName,
+                rivalGameId: reportRivalId,
+                rivalRace: reportRivalRace,
+                isWinner: reportIsWinner,
+                goldLooted: reportGold,
+                xpEarned: reportXp,
+                timestamp: new Date().toISOString(),
+              });
+            }
+          }
+        } catch {
+          // Skip individual report errors
+        }
+      }
+    } catch {
+      logDebug("[MESSAGES] Failed to fetch PvP message history");
+    }
 
     return {
       race,

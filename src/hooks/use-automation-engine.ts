@@ -74,23 +74,8 @@ export function useAutomationEngine(): AutomationEngineState {
         settings: config,
       });
 
-      const reductionPercent = (() => {
-        const setting = settings?.find(
-          (s: any) => s.settingName === "cooldown_reduction",
-        );
-        if (!setting) return 0;
-        try {
-          return JSON.parse(setting.settingValue) || 0;
-        } catch {
-          return 0;
-        }
-      })();
-
-      const adjustedCooldown = Math.floor(
-        result.pvpCooldown * (1 - reductionPercent / 100),
-      );
-      cooldownRef.current = adjustedCooldown;
-      setCooldown(adjustedCooldown);
+      cooldownRef.current = result.pvpCooldown;
+      setCooldown(result.pvpCooldown);
 
       const updateData: any = {
         id: user.uid,
