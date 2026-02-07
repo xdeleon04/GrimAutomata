@@ -33,9 +33,11 @@ GrimAutomata is a Next.js application with a dark, gothic theme. It uses Firebas
 ### Running the Development Server
 
 To run the application in development mode, use the following command:
+
 ```bash
 npm run dev
 ```
+
 The application will be available at http://localhost:9002.
 
 ## Available Scripts
@@ -44,7 +46,15 @@ The application will be available at http://localhost:9002.
 - `npm run build`: Creates a production build of the application.
 - `npm run start`: Starts the production server.
 - `npm run test`: Runs tests using Jest.
-- `npm run genkit:dev`: Starts the Genkit development server.
+- `npm run genkit:dGEMINI_API_KEY=AIzaSyCCMs6CjRmtfeh6SfhJbZgRVfyH_VAc1VQ
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID=studio-722893461-38648
+  NEXT_PUBLIC_FIREBASE_APP_ID=1:1090518479353:web:bf07b48305800c7111cd28
+  NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyBJqmpm4pY3TC31KANAMS67EOZ_ChryRII
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=studio-722893461-38648.firebaseapp.com
+  NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=1090518479353
+
+      ev`: Starts the Genkit development server.
 - `npm run genkit:watch`: Starts the Genkit development server in watch mode.
 
 ## Technologies Used

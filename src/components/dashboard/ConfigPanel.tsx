@@ -49,7 +49,7 @@ export function ConfigPanel() {
     if (!db || !user) return;
     const settingId = name.toLowerCase().replace(/\s+/g, '_');
     const settingRef = doc(db, 'users', user.uid, 'automationSettings', settingId);
-    
+
     setDocumentNonBlocking(settingRef, {
       id: settingId,
       userId: user.uid,
@@ -75,7 +75,7 @@ export function ConfigPanel() {
         <CardTitle className="text-accent flex items-center gap-2 font-headline">
           <Settings className="w-5 h-5" /> Ritual Configuration
         </CardTitle>
-        <CardDescription>Configure your bot's automated actions in the Shadow Realm.</CardDescription>
+        <CardDescription>Configure your bot&apos;s automated actions in the Shadow Realm.</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="combat" className="w-full">
@@ -86,7 +86,7 @@ export function ConfigPanel() {
             <TabsTrigger value="missions" className="data-[state=active]:bg-primary"><MapPin className="w-4 h-4" /></TabsTrigger>
             <TabsTrigger value="behavior" className="data-[state=active]:bg-primary"><Ghost className="w-4 h-4" /></TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="combat" className="space-y-6 pt-4">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -94,16 +94,16 @@ export function ConfigPanel() {
                   <Label>Auto-Manhunt</Label>
                   <p className="text-xs text-muted-foreground">Hunt humans for gold and XP.</p>
                 </div>
-                <Switch 
-                  checked={getSetting('auto_manhunt', true)} 
+                <Switch
+                  checked={getSetting('auto_manhunt', true)}
                   onCheckedChange={(checked) => updateSetting('auto_manhunt', checked)}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label className="text-xs">Hunt Duration (Minutes)</Label>
-                <Select 
-                  value={getSetting('manhunt_duration', '60')} 
+                <Select
+                  value={getSetting('manhunt_duration', '60')}
                   onValueChange={(value) => updateSetting('manhunt_duration', value)}
                 >
                   <SelectTrigger className="h-8 bg-background/50">
@@ -125,8 +125,8 @@ export function ConfigPanel() {
                   <Label>PVP: Attack Opponents</Label>
                   <p className="text-xs text-muted-foreground">Automatically attack members of the opposite race.</p>
                 </div>
-                <Switch 
-                  checked={getSetting('pvp_attack', false)} 
+                <Switch
+                  checked={getSetting('pvp_attack', false)}
                   onCheckedChange={(checked) => updateSetting('pvp_attack', checked)}
                 />
               </div>
@@ -135,8 +135,8 @@ export function ConfigPanel() {
                 <Label className="text-xs flex items-center gap-2">
                   <Search className="w-3 h-3" /> Search Strategy
                 </Label>
-                <Select 
-                  value={getSetting('pvp_search_strategy', 'none')} 
+                <Select
+                  value={getSetting('pvp_search_strategy', 'none')}
                   onValueChange={(value) => updateSetting('pvp_search_strategy', value)}
                 >
                   <SelectTrigger className="h-8 bg-background/50">
@@ -158,8 +158,8 @@ export function ConfigPanel() {
                   <Label>Auto-Alchemy</Label>
                   <p className="text-xs text-muted-foreground">Buy and use elixirs when vitality is low.</p>
                 </div>
-                <Switch 
-                  checked={getSetting('auto_alchemy', false)} 
+                <Switch
+                  checked={getSetting('auto_alchemy', false)}
                   onCheckedChange={(checked) => updateSetting('auto_alchemy', checked)}
                 />
               </div>
@@ -169,11 +169,11 @@ export function ConfigPanel() {
                   <Label className="text-xs">Vitality Use Threshold</Label>
                   <span className="text-xs text-accent">{getSetting('alchemy_threshold', 30)}%</span>
                 </div>
-                <Slider 
-                  value={[getSetting('alchemy_threshold', 30)]} 
-                  max={90} 
-                  step={1} 
-                  className="py-2" 
+                <Slider
+                  value={[getSetting('alchemy_threshold', 30)]}
+                  max={90}
+                  step={1}
+                  className="py-2"
                   onValueChange={(value) => updateSetting('alchemy_threshold', value[0])}
                 />
                 <p className="text-[10px] text-muted-foreground italic">Bot will attempt alchemy if energy falls below this point.</p>
@@ -181,8 +181,8 @@ export function ConfigPanel() {
 
               <div className="space-y-2">
                 <Label className="text-xs">Max Potion Budget</Label>
-                <Select 
-                  value={getSetting('potion_budget', '445')} 
+                <Select
+                  value={getSetting('potion_budget', '445')}
                   onValueChange={(value) => updateSetting('potion_budget', value)}
                 >
                   <SelectTrigger className="h-8 bg-background/50">
@@ -205,20 +205,19 @@ export function ConfigPanel() {
                 <Label>Auto-Training</Label>
                 <p className="text-xs text-muted-foreground">Spend gold on character attributes.</p>
               </div>
-              <Switch 
-                checked={getSetting('auto_training', true)} 
+              <Switch
+                checked={getSetting('auto_training', true)}
                 onCheckedChange={(checked) => updateSetting('auto_training', checked)}
               />
             </div>
-            
+
             <div className="space-y-3">
               <Label className="text-xs uppercase tracking-widest text-muted-foreground">Attribute Priority</Label>
               <div className="grid grid-cols-1 gap-2">
                 {['Strength', 'Defense', 'Dexterity', 'Agility', 'Constitution'].map(stat => (
                   <div key={stat} className="flex items-center justify-between p-2 border rounded-md text-xs bg-muted/20">
                     <span>{stat}</span>
-                    <Switch 
-                      size="sm" 
+                    <Switch
                       checked={getSetting(`train_${stat.toLowerCase()}`, true)}
                       onCheckedChange={(checked) => updateSetting(`train_${stat.toLowerCase()}`, checked)}
                     />
@@ -234,16 +233,16 @@ export function ConfigPanel() {
                 <Label>Ancestral Grotto</Label>
                 <p className="text-xs text-muted-foreground">Automate PvE missions.</p>
               </div>
-              <Switch 
-                checked={getSetting('auto_grotto', true)} 
+              <Switch
+                checked={getSetting('auto_grotto', true)}
                 onCheckedChange={(checked) => updateSetting('auto_grotto', checked)}
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label className="text-xs">Mission Difficulty</Label>
-              <Select 
-                value={getSetting('mission_difficulty', 'medium')} 
+              <Select
+                value={getSetting('mission_difficulty', 'medium')}
                 onValueChange={(value) => updateSetting('mission_difficulty', value)}
               >
                 <SelectTrigger className="h-8 bg-background/50">
@@ -266,11 +265,11 @@ export function ConfigPanel() {
                 </Label>
                 <span className="text-xs text-accent">{getSetting('stamina_reserve', 10)}%</span>
               </div>
-              <Slider 
-                value={[getSetting('stamina_reserve', 10)]} 
-                max={100} 
-                step={1} 
-                className="py-2" 
+              <Slider
+                value={[getSetting('stamina_reserve', 10)]}
+                max={100}
+                step={1}
+                className="py-2"
                 onValueChange={(value) => updateSetting('stamina_reserve', value[0])}
               />
               <p className="text-[10px] text-muted-foreground italic">Rituals will pause if stamina falls below this percentage.</p>
@@ -281,8 +280,8 @@ export function ConfigPanel() {
                 <Label className="flex items-center gap-2"><Hammer className="w-3 h-3" /> Auto-Work at Graveyard</Label>
                 <p className="text-xs text-muted-foreground">Automatically work to restore stamina when below threshold.</p>
               </div>
-              <Switch 
-                checked={getSetting('auto_work', true)} 
+              <Switch
+                checked={getSetting('auto_work', true)}
                 onCheckedChange={(checked) => updateSetting('auto_work', checked)}
               />
             </div>

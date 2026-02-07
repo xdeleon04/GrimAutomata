@@ -3,22 +3,22 @@
 
 import React, { useState, useEffect } from 'react';
 import { Dashboard } from '@/components/dashboard/Dashboard';
-import { 
-  SidebarProvider, 
-  Sidebar, 
-  SidebarContent, 
-  SidebarHeader, 
-  SidebarMenu, 
-  SidebarMenuItem, 
-  SidebarMenuButton 
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton
 } from '@/components/ui/sidebar';
-import { 
-  Ghost, 
-  Settings, 
-  History, 
-  Lock, 
-  User as UserIcon, 
-  Moon, 
+import {
+  Ghost,
+  Settings,
+  History,
+  Lock,
+  User as UserIcon,
+  Moon,
   LogIn,
   LayoutDashboard,
   ExternalLink
@@ -68,13 +68,13 @@ export default function Home() {
         </div>
         <div className="text-center space-y-2">
           <p className="text-muted-foreground max-w-md italic">
-            "The shadows await your command. Step into the sanctuary to begin the automation of your dark path."
+            &ldquo;The shadows await your command. Step into the sanctuary to begin the automation of your dark path.&rdquo;
           </p>
           <p className="text-[10px] text-accent/50 uppercase tracking-widest font-mono">
             Secure Connection: monstersgame.moonid.net
           </p>
         </div>
-        <Button 
+        <Button
           size="lg"
           onClick={() => initiateAnonymousSignIn(auth)}
           className="bg-accent text-accent-foreground hover:bg-accent/90 px-12 font-bold gothic-border"
@@ -147,7 +147,7 @@ export default function Home() {
           <SidebarContent>
             <SidebarMenu className="px-2">
               <SidebarMenuItem>
-                <SidebarMenuButton 
+                <SidebarMenuButton
                   onClick={() => setActiveView('dashboard')}
                   isActive={activeView === 'dashboard'}
                   className="py-6"
@@ -156,7 +156,7 @@ export default function Home() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton 
+                <SidebarMenuButton
                   onClick={() => setActiveView('profile')}
                   isActive={activeView === 'profile'}
                   className="py-6"
@@ -165,7 +165,7 @@ export default function Home() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton 
+                <SidebarMenuButton
                   onClick={() => setActiveView('rituals')}
                   isActive={activeView === 'rituals'}
                   className="py-6"
@@ -174,7 +174,7 @@ export default function Home() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton 
+                <SidebarMenuButton
                   onClick={() => setActiveView('chronicles')}
                   isActive={activeView === 'chronicles'}
                   className="py-6"
@@ -183,7 +183,7 @@ export default function Home() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton 
+                <SidebarMenuButton
                   onClick={() => setActiveView('vault')}
                   isActive={activeView === 'vault'}
                   className="py-6"
@@ -195,17 +195,17 @@ export default function Home() {
           </SidebarContent>
           <div className="p-4 mt-auto border-t border-primary/10 space-y-4">
              <div className="space-y-2">
-              <a 
-                href="https://moonid.net/account/login/?next=/api/account/connect/83/" 
-                target="_blank" 
+              <a
+                href="https://moonid.net/account/login/?next=/api/account/connect/83/"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-accent hover:text-accent/80 transition-colors"
               >
                 <ExternalLink className="w-3 h-3" /> Connect MoonID
               </a>
-              <a 
-                href="https://es1.monstersgame.moonid.net/index.php" 
-                target="_blank" 
+              <a
+                href="https://es1.monstersgame.moonid.net/index.php"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-accent hover:text-accent/80 transition-colors"
               >
