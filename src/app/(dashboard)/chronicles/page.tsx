@@ -26,6 +26,17 @@ const PvPTargets = dynamic(
   },
 );
 
+const PvPOverview = dynamic(
+  () => import("@/components/dashboard/PvPOverview").then((m) => m.default),
+  {
+    loading: () => (
+      <div className="h-64 flex items-center justify-center animate-pulse">
+        Loading...
+      </div>
+    ),
+  },
+);
+
 export default function ChroniclesPage() {
   return (
     <div className="space-y-6 h-[calc(100vh-180px)] animate-in fade-in slide-in-from-bottom-4">
@@ -49,7 +60,10 @@ export default function ChroniclesPage() {
           <ActivityLog />
         </TabsContent>
         <TabsContent value="pvp">
-          <PvPTargets />
+          <div className="space-y-6">
+            <PvPOverview />
+            <PvPTargets />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
