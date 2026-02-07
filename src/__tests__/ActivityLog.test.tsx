@@ -19,6 +19,7 @@ jest.mock("@/components/dashboard/DashboardDataProvider", () => ({
   useCredentials: () => mockUseCredentials(),
   useAutomationSettings: () => mockUseAutomationSettings(),
   useActivityLogs: () => mockUseActivityLogs(),
+  usePvPVictories: () => ({ data: [], isLoading: false }),
   DashboardDataProvider: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),

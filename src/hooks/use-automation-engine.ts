@@ -12,6 +12,7 @@ import { syncMoonId } from "@/ai/flows/moon-id-sync-flow";
 import {
   useCredentials,
   useAutomationSettings,
+  usePvPVictories,
 } from "@/components/dashboard/DashboardDataProvider";
 
 export interface AutomationEngineState {
@@ -21,6 +22,7 @@ export interface AutomationEngineState {
   debugMode: boolean;
   cooldown: number;
   credentials: any;
+  manualPvpStatus: any;
   handleToggle: () => void;
   setDebugMode: (value: boolean) => void;
 }
@@ -33,6 +35,7 @@ export function useAutomationEngine(): AutomationEngineState {
   const [isSyncing, setIsSyncing] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [manualPvpStatus, setManualPvpStatus] = useState<any>(null);
 
   const lastSyncRef = useRef<number>(0);
   const isSyncingRef = useRef<boolean>(false);
@@ -46,6 +49,7 @@ export function useAutomationEngine(): AutomationEngineState {
 
   const { data: credentials } = useCredentials();
   const { data: settings } = useAutomationSettings();
+  const { data: pvpRivals } = usePvPVictories();
 
   const triggerSync = useCallback(async () => {
     if (!user || !db || !credentials || !userDocRef || isSyncingRef.current)
@@ -65,6 +69,15 @@ export function useAutomationEngine(): AutomationEngineState {
       }
     });
 
+    // Build manual PvP target list from stored victories
+    const pvpTargetList =
+      config.manual_pvp && pvpRivals
+        ? pvpRivals.map((r: any) => ({
+            rivalGameId: r.rivalGameId,
+            rivalName: r.rivalName,
+          }))
+        : [];
+
     try {
       const result = await syncMoonId({
         username: credentials.moonIdUsername,
@@ -72,10 +85,12 @@ export function useAutomationEngine(): AutomationEngineState {
         server: credentials.description || "es1.monstersgame.moonid.net",
         debug: debugMode,
         settings: config,
+        pvpTargetList,
       });
 
       cooldownRef.current = result.pvpCooldown;
       setCooldown(result.pvpCooldown);
+      setManualPvpStatus(result.manualPvpStatus || null);
 
       const updateData: any = {
         id: user.uid,
@@ -111,18 +126,18 @@ export function useAutomationEngine(): AutomationEngineState {
 
       if (result.pvpResults?.length > 0) {
         for (const battle of result.pvpResults) {
+          const rivalDocRef = doc(
+            db,
+            "users",
+            user.uid,
+            "pvpVictories",
+            battle.rivalGameId,
+          );
+
+          const existing = await getDoc(rivalDocRef);
+          const existingData = existing.exists() ? existing.data() : null;
+
           if (battle.isWinner) {
-            const rivalDocRef = doc(
-              db,
-              "users",
-              user.uid,
-              "pvpVictories",
-              battle.rivalGameId,
-            );
-
-            const existing = await getDoc(rivalDocRef);
-            const existingData = existing.exists() ? existing.data() : null;
-
             setDocumentNonBlocking(
               rivalDocRef,
               {
@@ -141,6 +156,23 @@ export function useAutomationEngine(): AutomationEngineState {
               },
               { merge: true },
             );
+          } else {
+            setDocumentNonBlocking(
+              rivalDocRef,
+              {
+                id: battle.rivalGameId,
+                rivalName: battle.rivalName,
+                rivalGameId: battle.rivalGameId,
+                rivalRace: battle.rivalRace || existingData?.rivalRace || "",
+                wins: existingData?.wins || 0,
+                losses: (existingData?.losses || 0) + 1,
+                totalGoldLooted: existingData?.totalGoldLooted || 0,
+                totalXpEarned: existingData?.totalXpEarned || 0,
+                lastBattleDate: battle.timestamp,
+                lastResult: "LOSS",
+              },
+              { merge: true },
+            );
           }
         }
       }
@@ -150,7 +182,7 @@ export function useAutomationEngine(): AutomationEngineState {
       isSyncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [user, db, credentials, userDocRef, settings, debugMode]);
+  }, [user, db, credentials, userDocRef, settings, debugMode, pvpRivals]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -213,6 +245,7 @@ export function useAutomationEngine(): AutomationEngineState {
     debugMode,
     cooldown,
     credentials,
+    manualPvpStatus,
     handleToggle,
     setDebugMode,
   };

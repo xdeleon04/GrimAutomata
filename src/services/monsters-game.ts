@@ -45,6 +45,13 @@ export interface MonstersGameStats {
     xpEarned: number;
     timestamp: string;
   }>;
+  manualPvpStatus?: {
+    currentTargetId: string;
+    currentTargetName: string;
+    targetIndex: number;
+    totalTargets: number;
+    attempted: string[];
+  };
 }
 
 /**
@@ -92,14 +99,10 @@ function parseTimeFromText(html: string): number | null {
   if (combinedMatch)
     return parseInt(combinedMatch[1]) * 3600 + parseInt(combinedMatch[2]) * 60;
 
-  const hoursMatch = html.match(
-    /(?:In|En)\s+(\d+)\s+(?:hours?|horas?)/i,
-  );
+  const hoursMatch = html.match(/(?:In|En)\s+(\d+)\s+(?:hours?|horas?)/i);
   if (hoursMatch) return parseInt(hoursMatch[1]) * 3600;
 
-  const minutesMatch = html.match(
-    /(?:In|En)\s+(\d+)\s+(?:minutes?|minutos?)/i,
-  );
+  const minutesMatch = html.match(/(?:In|En)\s+(\d+)\s+(?:minutes?|minutos?)/i);
   if (minutesMatch) return parseInt(minutesMatch[1]) * 60;
 
   return null;
@@ -114,10 +117,12 @@ export async function fetchMonstersGameData(
   server: string,
   debug: boolean = false,
   settings: Record<string, any> = {},
+  pvpTargetList: Array<{ rivalGameId: string; rivalName: string }> = [],
 ): Promise<MonstersGameStats | null> {
   const logs: MonstersGameStats["logs"] = [];
   const pvpResults: MonstersGameStats["pvpResults"] = [];
   let pvpCooldown = 0;
+  let manualPvpStatus: MonstersGameStats["manualPvpStatus"] = undefined;
 
   const logDebug = (msg: string) => {
     if (debug) {
@@ -443,60 +448,15 @@ export async function fetchMonstersGameData(
             huntHtml.includes("used all of today's hunting time") ||
             huntHtml.includes("ya has usado todo tu tiempo de caza");
 
-          if (humanLimitReached && settings.pvp_attack) {
-            const pvpSearchPayload = new URLSearchParams({
-              ac: "raubzug",
-              sac: "gegner",
-              searchname: settings.pvp_target_name || "",
-              searchopt:
-                settings.pvp_search_strategy === "none"
-                  ? ""
-                  : settings.pvp_search_strategy || "",
-            });
-            const pvpSearchRes = await fetch(huntPageUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-                Cookie: getCookieString(),
-                "User-Agent": userAgent,
-              },
-              body: pvpSearchPayload,
-            });
-            const searchHtml = await pvpSearchRes.text();
+          if (pvpCooldown <= 0 && humanLimitReached) {
+            if (settings.manual_pvp && pvpTargetList.length > 0) {
+              const attemptedTargets: string[] = [];
+              let manualAttackSucceeded = false;
 
-            if (
-              searchHtml.includes("en vano") ||
-              searchHtml.includes("no character matches")
-            ) {
-              logs.push({
-                type: "BATTLE",
-                message:
-                  "PvP Ritual: Rival eluded our sight. Try increasing Dexterity or retry next cycle.",
-                timestamp: new Date().toISOString(),
-              });
-            } else {
-              const gegnerIdMatch = searchHtml.match(
-                /name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i,
-              );
-              const rivalNameMatch =
-                searchHtml.match(
-                  /<div class="headerRow">(?:Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)\s+([^<]+)<\/div>/i,
-                ) ||
-                searchHtml.match(/sac=info&amp;id=\d+[^>]*>([^<]+)<\/a>/i) ||
-                searchHtml.match(
-                  /<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i,
-                );
-              const rivalRaceMatch = searchHtml.match(
-                /<div class="headerRow">(Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)/i,
-              );
-              const rivalRace = rivalRaceMatch
-                ? rivalRaceMatch[1]
-                : undefined;
-              const rivalName = rivalNameMatch
-                ? rivalNameMatch[1].trim()
-                : "Unknown Rival";
+              for (let index = 0; index < pvpTargetList.length; index += 1) {
+                const rival = pvpTargetList[index];
+                attemptedTargets.push(rival.rivalGameId);
 
-              if (gegnerIdMatch) {
                 const battleRes = await fetch(huntPageUrl, {
                   method: "POST",
                   headers: {
@@ -507,10 +467,36 @@ export async function fetchMonstersGameData(
                   body: new URLSearchParams({
                     ac: "raubzug",
                     sac: "attack",
-                    gegnerid: gegnerIdMatch[1],
+                    gegnerid: rival.rivalGameId,
                   }),
                 });
                 const battleHtml = await battleRes.text();
+
+                const notFound =
+                  /no fue encontrado|not found|kein gegner/i.test(battleHtml);
+                const hasBattleResult =
+                  battleHtml.includes("headerRowCWinner") ||
+                  /Ha conseguido|puntos?\s+de\s+experiencia|experience\s+points/i.test(
+                    battleHtml,
+                  );
+
+                if (notFound) {
+                  logs.push({
+                    type: "INFO",
+                    message: `Manual PvP: Rival ${rival.rivalName} was not found. Trying next target.`,
+                    timestamp: new Date().toISOString(),
+                  });
+                  continue;
+                }
+
+                if (!hasBattleResult) {
+                  logs.push({
+                    type: "INFO",
+                    message: `Manual PvP: Rival ${rival.rivalName} could not be attacked. Trying next target.`,
+                    timestamp: new Date().toISOString(),
+                  });
+                  continue;
+                }
 
                 const isWinner =
                   battleHtml.includes("headerRowCWinner") ||
@@ -525,7 +511,6 @@ export async function fetchMonstersGameData(
                     /([\d,.]+)\s+(?:experience\s+points|punto\(?s?\)?\s+de\s+experiencia|puntos\s+de\s+experiencia|experiencia|puntos\s+de\s+exp|experience)/i,
                   )?.[1] || "0",
                 );
-
                 const textCooldownPvP = parseTimeFromText(battleHtml);
                 pvpCooldown =
                   textCooldownPvP ??
@@ -534,20 +519,146 @@ export async function fetchMonstersGameData(
                       /var\s+SecondsCOUNTER\s*=\s*(\d+);/i,
                     )?.[1] || "900",
                   );
+
                 logs.push({
                   type: "BATTLE",
-                  message: `PvP Ritual: ${isWinner ? "VICTORY" : "DEFEAT"} vs ${rivalName}. Loot: ${lootVal.toFixed(2)} gold, ${expVal} XP.`,
+                  message: `Manual PvP: ${isWinner ? "VICTORY" : "DEFEAT"} vs ${rival.rivalName}. Loot: ${lootVal.toFixed(2)} gold, ${expVal} XP.`,
                   timestamp: new Date().toISOString(),
                 });
                 pvpResults.push({
-                  rivalName,
-                  rivalGameId: gegnerIdMatch[1],
-                  rivalRace,
+                  rivalName: rival.rivalName,
+                  rivalGameId: rival.rivalGameId,
+                  rivalRace: undefined,
                   isWinner,
                   goldLooted: lootVal,
                   xpEarned: expVal,
                   timestamp: new Date().toISOString(),
                 });
+                manualPvpStatus = {
+                  currentTargetId: rival.rivalGameId,
+                  currentTargetName: rival.rivalName,
+                  targetIndex: index + 1,
+                  totalTargets: pvpTargetList.length,
+                  attempted: attemptedTargets,
+                };
+                manualAttackSucceeded = true;
+                break;
+              }
+
+              if (!manualAttackSucceeded) {
+                logs.push({
+                  type: "INFO",
+                  message:
+                    "Manual PvP: All targets in the win list were unavailable.",
+                  timestamp: new Date().toISOString(),
+                });
+              }
+            } else if (settings.pvp_attack) {
+              const pvpSearchPayload = new URLSearchParams({
+                ac: "raubzug",
+                sac: "gegner",
+                searchname: settings.pvp_target_name || "",
+                searchopt:
+                  settings.pvp_search_strategy === "none"
+                    ? ""
+                    : settings.pvp_search_strategy || "",
+              });
+              const pvpSearchRes = await fetch(huntPageUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/x-www-form-urlencoded",
+                  Cookie: getCookieString(),
+                  "User-Agent": userAgent,
+                },
+                body: pvpSearchPayload,
+              });
+              const searchHtml = await pvpSearchRes.text();
+
+              if (
+                searchHtml.includes("en vano") ||
+                searchHtml.includes("no character matches")
+              ) {
+                logs.push({
+                  type: "BATTLE",
+                  message:
+                    "PvP Ritual: Rival eluded our sight. Try increasing Dexterity or retry next cycle.",
+                  timestamp: new Date().toISOString(),
+                });
+              } else {
+                const gegnerIdMatch = searchHtml.match(
+                  /name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i,
+                );
+                const rivalNameMatch =
+                  searchHtml.match(
+                    /<div class="headerRow">(?:Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)\s+([^<]+)<\/div>/i,
+                  ) ||
+                  searchHtml.match(/sac=info&amp;id=\d+[^>]*>([^<]+)<\/a>/i) ||
+                  searchHtml.match(
+                    /<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i,
+                  );
+                const rivalRaceMatch = searchHtml.match(
+                  /<div class="headerRow">(Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)/i,
+                );
+                const rivalRace = rivalRaceMatch
+                  ? rivalRaceMatch[1]
+                  : undefined;
+                const rivalName = rivalNameMatch
+                  ? rivalNameMatch[1].trim()
+                  : "Unknown Rival";
+
+                if (gegnerIdMatch) {
+                  const battleRes = await fetch(huntPageUrl, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/x-www-form-urlencoded",
+                      Cookie: getCookieString(),
+                      "User-Agent": userAgent,
+                    },
+                    body: new URLSearchParams({
+                      ac: "raubzug",
+                      sac: "attack",
+                      gegnerid: gegnerIdMatch[1],
+                    }),
+                  });
+                  const battleHtml = await battleRes.text();
+
+                  const isWinner =
+                    battleHtml.includes("headerRowCWinner") ||
+                    battleHtml.includes("ganado");
+                  const lootVal = parseMGNumber(
+                    battleHtml.match(
+                      /Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i,
+                    )?.[1] || "0",
+                  );
+                  const expVal = parseMGNumber(
+                    battleHtml.match(
+                      /([\d,.]+)\s+(?:experience\s+points|punto\(?s?\)?\s+de\s+experiencia|puntos\s+de\s+experiencia|experiencia|puntos\s+de\s+exp|experience)/i,
+                    )?.[1] || "0",
+                  );
+
+                  const textCooldownPvP = parseTimeFromText(battleHtml);
+                  pvpCooldown =
+                    textCooldownPvP ??
+                    parseInt(
+                      battleHtml.match(
+                        /var\s+SecondsCOUNTER\s*=\s*(\d+);/i,
+                      )?.[1] || "900",
+                    );
+                  logs.push({
+                    type: "BATTLE",
+                    message: `PvP Ritual: ${isWinner ? "VICTORY" : "DEFEAT"} vs ${rivalName}. Loot: ${lootVal.toFixed(2)} gold, ${expVal} XP.`,
+                    timestamp: new Date().toISOString(),
+                  });
+                  pvpResults.push({
+                    rivalName,
+                    rivalGameId: gegnerIdMatch[1],
+                    rivalRace,
+                    isWinner,
+                    goldLooted: lootVal,
+                    xpEarned: expVal,
+                    timestamp: new Date().toISOString(),
+                  });
+                }
               }
             }
           } else if (settings.auto_manhunt && !humanLimitReached) {
@@ -796,6 +907,7 @@ export async function fetchMonstersGameData(
       logs,
       pvpCooldown,
       pvpResults,
+      manualPvpStatus,
     };
   } catch (error: any) {
     return {
@@ -825,6 +937,7 @@ export async function fetchMonstersGameData(
         },
       ],
       pvpResults,
+      manualPvpStatus,
     };
   }
 }

@@ -24,7 +24,17 @@ type SortField =
   | "lastBattleDate";
 type SortDirection = "asc" | "desc";
 
-export default function PvPTargets() {
+interface PvPTargetsProps {
+  manualPvpStatus?: {
+    currentTargetId: string;
+    currentTargetName: string;
+    targetIndex: number;
+    totalTargets: number;
+    attempted: string[];
+  } | null;
+}
+
+export default function PvPTargets({ manualPvpStatus }: PvPTargetsProps) {
   const { data: rivals, isLoading, error } = usePvPVictories();
   const [sortField, setSortField] = useState<SortField>("wins");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -104,100 +114,146 @@ export default function PvPTargets() {
         <CardTitle className="font-headline tracking-widest text-[#d8d8d8] flex items-center gap-2 text-sm uppercase">
           <Crosshair className="h-4 w-4 text-accent" />
           Shadow Mark Ledger
-          {rivals && (
-            <span className="ml-auto font-mono text-[10px] text-muted-foreground normal-case tracking-normal">
-              {rivals.length} targets
+          {manualPvpStatus?.currentTargetName ? (
+            <span className="ml-auto font-mono text-[10px] text-accent animate-pulse normal-case tracking-normal">
+              Targeting: {manualPvpStatus.currentTargetName} (
+              {manualPvpStatus.targetIndex}/{manualPvpStatus.totalTargets})
             </span>
+          ) : (
+            rivals && (
+              <span className="ml-auto font-mono text-[10px] text-muted-foreground normal-case tracking-normal">
+                {rivals.length} targets
+              </span>
+            )
           )}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0 flex-1 min-h-0 relative">
-        {(!rivals || rivals.length === 0) ? (
+        {!rivals || rivals.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-[200px] text-center p-6 gap-3">
             <Skull className="h-8 w-8 text-muted-foreground/30" />
             <p className="font-mono text-[11px] text-muted-foreground/60 max-w-[200px]">
-              No blood marks recorded. Engage in PvP combat to populate the ledger.
+              No blood marks recorded. Engage in PvP combat to populate the
+              ledger.
             </p>
           </div>
         ) : (
           <div className="h-full flex flex-col">
             {/* Table Header - Fixed */}
             <div className="bg-card/30 border-b border-border/40 px-4 py-2 grid grid-cols-12 gap-2 text-[10px] font-mono text-muted-foreground uppercase tracking-wider sticky top-0 z-10 backdrop-blur-sm">
-              <div 
+              <div
                 className="col-span-3 cursor-pointer hover:text-accent transition-colors flex items-center gap-1"
                 onClick={() => toggleSort("rivalName")}
               >
                 Rival
-                {sortField === "rivalName" && <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                {sortField === "rivalName" && (
+                  <ArrowUpDown className="h-3 w-3 opacity-50" />
+                )}
               </div>
-              <div 
+              <div
                 className="col-span-2 cursor-pointer hover:text-accent transition-colors flex items-center gap-1"
                 onClick={() => toggleSort("rivalRace")}
               >
-                 Race
-                {sortField === "rivalRace" && <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                Race
+                {sortField === "rivalRace" && (
+                  <ArrowUpDown className="h-3 w-3 opacity-50" />
+                )}
               </div>
-              <div 
+              <div
                 className="col-span-2 text-right cursor-pointer hover:text-accent transition-colors flex items-center justify-end gap-1"
                 onClick={() => toggleSort("wins")}
               >
                 <TrendingUp className="h-3 w-3 text-muted-foreground/70" />
                 Wins
-                {sortField === "wins" && <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                {sortField === "wins" && (
+                  <ArrowUpDown className="h-3 w-3 opacity-50" />
+                )}
               </div>
-              <div 
+              <div
                 className="col-span-2 text-right cursor-pointer hover:text-accent transition-colors flex items-center justify-end gap-1"
                 onClick={() => toggleSort("totalGoldLooted")}
               >
                 <Coins className="h-3 w-3 text-muted-foreground/70" />
                 loot
-                {sortField === "totalGoldLooted" && <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                {sortField === "totalGoldLooted" && (
+                  <ArrowUpDown className="h-3 w-3 opacity-50" />
+                )}
               </div>
-              <div 
+              <div
                 className="col-span-3 text-right cursor-pointer hover:text-accent transition-colors flex items-center justify-end gap-1"
                 onClick={() => toggleSort("lastBattleDate")}
               >
                 Last Hunt
-                {sortField === "lastBattleDate" && <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                {sortField === "lastBattleDate" && (
+                  <ArrowUpDown className="h-3 w-3 opacity-50" />
+                )}
               </div>
             </div>
 
             {/* Scrollable List */}
             <ScrollArea className="flex-1">
               <div className="flex flex-col">
-                {sortedRivals.map((rival) => (
-                  <div
-                    key={rival.id}
-                    className="grid grid-cols-12 gap-2 px-4 py-2 border-b border-border/20 text-[11px] font-mono hover:bg-white/5 transition-colors group items-center"
-                  >
-                    <div className="col-span-3 font-medium text-foreground truncate group-hover:text-accent transition-colors">
-                      {rival.rivalName}
-                      <div className="text-[9px] text-muted-foreground/50">#{rival.rivalGameId}</div>
+                {sortedRivals.map((rival) => {
+                  const isCurrentTarget =
+                    manualPvpStatus?.currentTargetId === rival.rivalGameId;
+                  const isAttempted = manualPvpStatus?.attempted.includes(
+                    rival.rivalGameId,
+                  );
+                  const isSkipped = isAttempted && !isCurrentTarget;
+
+                  return (
+                    <div
+                      key={rival.id}
+                      className={cn(
+                        "grid grid-cols-12 gap-2 px-4 py-2 border-b border-border/20 text-[11px] font-mono transition-colors group items-center",
+                        isCurrentTarget
+                          ? "bg-accent/5 border-l-2 border-accent animate-pulse"
+                          : "hover:bg-white/5",
+                        isSkipped ? "opacity-50 decoration-slate-500" : "",
+                      )}
+                    >
+                      <div className="col-span-3 font-medium text-foreground truncate group-hover:text-accent transition-colors flex items-center gap-1">
+                        {isCurrentTarget && (
+                          <Crosshair className="w-3 h-3 text-accent inline-block" />
+                        )}
+                        <span className={isSkipped ? "line-through" : ""}>
+                          {rival.rivalName}
+                        </span>
+                        <div className="text-[9px] text-muted-foreground/50">
+                          #{rival.rivalGameId}
+                        </div>
+                      </div>
+                      <div className="col-span-2 text-muted-foreground trunacte">
+                        {rival.rivalRace || "Unknown"}
+                      </div>
+                      <div className="col-span-2 text-right">
+                        <span className="text-accent">{rival.wins}</span>
+                        <span className="text-muted-foreground/40 ml-1">/</span>
+                        <span className="text-red-400/60 ml-1">
+                          {rival.losses}
+                        </span>
+                      </div>
+                      <div className="col-span-2 text-right text-[#d4af37]/90 truncate">
+                        {rival.totalGoldLooted.toLocaleString()}
+                      </div>
+                      <div className="col-span-3 text-right text-muted-foreground/80 flex flex-col items-end leading-none gap-0.5">
+                        <span>
+                          {new Date(rival.lastBattleDate).toLocaleDateString()}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[9px] uppercase tracking-tighter px-1 py-0.5 rounded-[2px]",
+                            rival.lastResult === "WIN"
+                              ? "bg-accent/10 text-accent"
+                              : "bg-red-500/10 text-red-400",
+                          )}
+                        >
+                          {rival.lastResult}
+                        </span>
+                      </div>
                     </div>
-                    <div className="col-span-2 text-muted-foreground trunacte">
-                      {rival.rivalRace || "Unknown"}
-                    </div>
-                    <div className="col-span-2 text-right">
-                      <span className="text-accent">{rival.wins}</span>
-                      <span className="text-muted-foreground/40 ml-1">/</span>
-                      <span className="text-red-400/60 ml-1">{rival.losses}</span>
-                    </div>
-                    <div className="col-span-2 text-right text-[#d4af37]/90 truncate">
-                      {rival.totalGoldLooted.toLocaleString()}
-                    </div>
-                    <div className="col-span-3 text-right text-muted-foreground/80 flex flex-col items-end leading-none gap-0.5">
-                      <span>{new Date(rival.lastBattleDate).toLocaleDateString()}</span>
-                      <span className={cn(
-                        "text-[9px] uppercase tracking-tighter px-1 py-0.5 rounded-[2px]",
-                        rival.lastResult === "WIN" 
-                          ? "bg-accent/10 text-accent" 
-                          : "bg-red-500/10 text-red-400"
-                      )}>
-                        {rival.lastResult}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </ScrollArea>
           </div>

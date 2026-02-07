@@ -16,6 +16,15 @@ const MoonIdSyncInputSchema = z.object({
   server: z.string(),
   debug: z.boolean().optional(),
   settings: z.record(z.any()).optional(),
+  pvpTargetList: z
+    .array(
+      z.object({
+        rivalGameId: z.string(),
+        rivalName: z.string(),
+      }),
+    )
+    .optional()
+    .default([]),
 });
 export type MoonIdSyncInput = z.infer<typeof MoonIdSyncInputSchema>;
 
@@ -51,6 +60,15 @@ const MoonIdSyncOutputSchema = z.object({
       }),
     )
     .default([]),
+  manualPvpStatus: z
+    .object({
+      currentTargetId: z.string(),
+      currentTargetName: z.string(),
+      targetIndex: z.number(),
+      totalTargets: z.number(),
+      attempted: z.array(z.string()),
+    })
+    .optional(),
   stats: z.object({
     level: z.number(),
     gold: z.number(),
@@ -92,6 +110,7 @@ const moonIdSyncFlow = ai.defineFlow(
       input.server,
       input.debug,
       input.settings || {},
+      input.pvpTargetList || [],
     );
 
     if (!gameData) {
