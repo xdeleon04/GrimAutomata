@@ -16,6 +16,7 @@ import type {
   ActivityLogEntry,
   AutomationSetting,
   MoonIdCredentials,
+  PvPRival,
   UserProfile,
 } from "@/firebase/schema";
 
@@ -24,6 +25,7 @@ type CredentialsDocResult = UseDocResult<MoonIdCredentials>;
 type AutomationSettingsCollectionResult =
   UseCollectionResult<AutomationSetting>;
 type ActivityLogsCollectionResult = UseCollectionResult<ActivityLogEntry>;
+type PvPVictoriesCollectionResult = UseCollectionResult<PvPRival>;
 
 type DashboardContextValue<T> = T | null;
 
@@ -37,6 +39,8 @@ const AutomationSettingsContext =
   );
 const ActivityLogsContext =
   createContext<DashboardContextValue<ActivityLogsCollectionResult>>(null);
+const PvPVictoriesContext =
+  createContext<DashboardContextValue<PvPVictoriesCollectionResult>>(null);
 
 export function useUserProfile() {
   const context = use(UserProfileContext);
@@ -78,6 +82,16 @@ export function useActivityLogs() {
   return context;
 }
 
+export function usePvPVictories() {
+  const context = use(PvPVictoriesContext);
+  if (!context) {
+    throw new Error(
+      "usePvPVictories must be used within DashboardDataProvider.",
+    );
+  }
+  return context;
+}
+
 type DashboardDataProviderProps = {
   children: React.ReactNode;
 };
@@ -109,6 +123,12 @@ export function DashboardDataProvider({
     return query(base, orderBy("timestamp", "desc"), limit(100));
   }, [db, user?.uid]);
 
+  const pvpVictoriesQuery = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    const base = collection(db, "users", user.uid, "pvpVictories");
+    return query(base, orderBy("wins", "desc"), limit(100));
+  }, [db, user?.uid]);
+
   const userProfile: UserProfileDocResult = useDoc(userProfileRef);
   const credentials: CredentialsDocResult = useDoc(credentialsRef);
   const automationSettings: AutomationSettingsCollectionResult = useCollection(
@@ -116,13 +136,17 @@ export function DashboardDataProvider({
   );
   const activityLogs: ActivityLogsCollectionResult =
     useCollection(activityLogsQuery);
+  const pvpVictories: PvPVictoriesCollectionResult =
+    useCollection(pvpVictoriesQuery);
 
   return (
     <UserProfileContext value={userProfile}>
       <CredentialsContext value={credentials}>
         <AutomationSettingsContext value={automationSettings}>
           <ActivityLogsContext value={activityLogs}>
-            {children}
+            <PvPVictoriesContext value={pvpVictories}>
+              {children}
+            </PvPVictoriesContext>
           </ActivityLogsContext>
         </AutomationSettingsContext>
       </CredentialsContext>

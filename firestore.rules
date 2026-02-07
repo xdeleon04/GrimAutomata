@@ -40,6 +40,10 @@ service cloud.firestore {
       match /activityLogs/{logId} {
         allow get, list, create, update, delete: if isOwner(userId);
       }
+
+      match /pvpVictories/{rivalId} {
+        allow get, list, create, update, delete: if isOwner(userId);
+      }
     }
   }
 }

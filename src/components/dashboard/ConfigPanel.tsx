@@ -30,6 +30,7 @@ import {
   Zap,
   Hammer,
   FlaskConical,
+  Timer,
 } from "lucide-react";
 import { useUser, useFirestore } from "@/firebase";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
@@ -395,6 +396,29 @@ export function ConfigPanel() {
               />
               <p className="text-[10px] text-muted-foreground italic">
                 Rituals will pause if stamina falls below this percentage.
+              </p>
+            </div>
+
+            <div className="space-y-4 border-t pt-4">
+              <div className="flex justify-between">
+                <Label className="text-xs flex items-center gap-2">
+                  <Timer className="w-3 h-3" /> Equipment Cooldown Reduction
+                </Label>
+                <span className="text-xs text-accent">
+                  {getSetting("cooldown_reduction", 0)}%
+                </span>
+              </div>
+              <Slider
+                value={[getSetting("cooldown_reduction", 0)]}
+                max={50}
+                step={1}
+                className="py-2"
+                onValueChange={(value) =>
+                  updateSetting("cooldown_reduction", value[0])
+                }
+              />
+              <p className="text-[10px] text-muted-foreground italic">
+                Set this to match your equipped accomplishment cooldown reduction percentage.
               </p>
             </div>
 

@@ -7,7 +7,7 @@ import {
   useMemoFirebase,
   setDocumentNonBlocking,
 } from "@/firebase";
-import { doc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, collection, serverTimestamp, getDoc } from "firebase/firestore";
 import { syncMoonId } from "@/ai/flows/moon-id-sync-flow";
 import {
   useCredentials,
@@ -74,8 +74,23 @@ export function useAutomationEngine(): AutomationEngineState {
         settings: config,
       });
 
-      cooldownRef.current = result.pvpCooldown;
-      setCooldown(result.pvpCooldown);
+      const reductionPercent = (() => {
+        const setting = settings?.find(
+          (s: any) => s.settingName === "cooldown_reduction",
+        );
+        if (!setting) return 0;
+        try {
+          return JSON.parse(setting.settingValue) || 0;
+        } catch {
+          return 0;
+        }
+      })();
+
+      const adjustedCooldown = Math.floor(
+        result.pvpCooldown * (1 - reductionPercent / 100),
+      );
+      cooldownRef.current = adjustedCooldown;
+      setCooldown(adjustedCooldown);
 
       const updateData: any = {
         id: user.uid,
@@ -108,6 +123,42 @@ export function useAutomationEngine(): AutomationEngineState {
           { merge: true },
         );
       });
+
+      if (result.pvpResults?.length > 0) {
+        for (const battle of result.pvpResults) {
+          if (battle.isWinner) {
+            const rivalDocRef = doc(
+              db,
+              "users",
+              user.uid,
+              "pvpVictories",
+              battle.rivalGameId,
+            );
+
+            const existing = await getDoc(rivalDocRef);
+            const existingData = existing.exists() ? existing.data() : null;
+
+            setDocumentNonBlocking(
+              rivalDocRef,
+              {
+                id: battle.rivalGameId,
+                rivalName: battle.rivalName,
+                rivalGameId: battle.rivalGameId,
+                rivalRace: battle.rivalRace || existingData?.rivalRace || "",
+                wins: (existingData?.wins || 0) + 1,
+                losses: existingData?.losses || 0,
+                totalGoldLooted:
+                  (existingData?.totalGoldLooted || 0) + battle.goldLooted,
+                totalXpEarned:
+                  (existingData?.totalXpEarned || 0) + battle.xpEarned,
+                lastBattleDate: battle.timestamp,
+                lastResult: "WIN",
+              },
+              { merge: true },
+            );
+          }
+        }
+      }
     } catch {
       // Handled by FirebaseErrorListener
     } finally {

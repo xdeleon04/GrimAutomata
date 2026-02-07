@@ -36,6 +36,15 @@ export interface MonstersGameStats {
       constitution: number;
     };
   };
+  pvpResults: Array<{
+    rivalName: string;
+    rivalGameId: string;
+    rivalRace?: string;
+    isWinner: boolean;
+    goldLooted: number;
+    xpEarned: number;
+    timestamp: string;
+  }>;
 }
 
 /**
@@ -79,6 +88,7 @@ export async function fetchMonstersGameData(
   settings: Record<string, any> = {},
 ): Promise<MonstersGameStats | null> {
   const logs: MonstersGameStats["logs"] = [];
+  const pvpResults: MonstersGameStats["pvpResults"] = [];
   let pvpCooldown = 0;
 
   const logDebug = (msg: string) => {
@@ -445,6 +455,12 @@ export async function fetchMonstersGameData(
                 searchHtml.match(
                   /<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i,
                 );
+              const rivalRaceMatch = searchHtml.match(
+                /<div class="headerRow">(Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)/i,
+              );
+              const rivalRace = rivalRaceMatch
+                ? rivalRaceMatch[1]
+                : undefined;
               const rivalName = rivalNameMatch
                 ? rivalNameMatch[1].trim()
                 : "Unknown Rival";
@@ -486,6 +502,15 @@ export async function fetchMonstersGameData(
                 logs.push({
                   type: "BATTLE",
                   message: `PvP Ritual: ${isWinner ? "VICTORY" : "DEFEAT"} vs ${rivalName}. Loot: ${lootVal.toFixed(2)} gold, ${expVal} XP.`,
+                  timestamp: new Date().toISOString(),
+                });
+                pvpResults.push({
+                  rivalName,
+                  rivalGameId: gegnerIdMatch[1],
+                  rivalRace,
+                  isWinner,
+                  goldLooted: lootVal,
+                  xpEarned: expVal,
                   timestamp: new Date().toISOString(),
                 });
               }
@@ -658,6 +683,7 @@ export async function fetchMonstersGameData(
       },
       logs,
       pvpCooldown,
+      pvpResults,
     };
   } catch (error: any) {
     return {
@@ -686,6 +712,7 @@ export async function fetchMonstersGameData(
           timestamp: new Date().toISOString(),
         },
       ],
+      pvpResults,
     };
   }
 }

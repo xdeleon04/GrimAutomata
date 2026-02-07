@@ -57,3 +57,17 @@ export interface ActivityLogEntry {
     | "MISSION"
     | "DEBUG";
 }
+
+/** Aggregated PvP rival record — one document per unique opponent */
+export interface PvPRival {
+  id: string; // Firestore doc ID = rival's game ID
+  rivalName: string; // In-game name
+  rivalGameId: string; // Numeric game ID from gegnerid
+  rivalRace?: string; // 'Vampiro' | 'Hombre Lobo' if known
+  wins: number; // Total victories against this rival
+  losses: number; // Total defeats (0 if only tracking wins)
+  totalGoldLooted: number;
+  totalXpEarned: number;
+  lastBattleDate: string; // ISO timestamp
+  lastResult: "WIN" | "LOSS";
+}

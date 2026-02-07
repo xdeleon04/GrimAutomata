@@ -38,6 +38,19 @@ const MoonIdSyncOutputSchema = z.object({
       timestamp: z.string(),
     }),
   ),
+  pvpResults: z
+    .array(
+      z.object({
+        rivalName: z.string(),
+        rivalGameId: z.string(),
+        rivalRace: z.string().optional(),
+        isWinner: z.boolean(),
+        goldLooted: z.number(),
+        xpEarned: z.number(),
+        timestamp: z.string(),
+      }),
+    )
+    .default([]),
   stats: z.object({
     level: z.number(),
     gold: z.number(),
