@@ -69,11 +69,18 @@ export function useAutomationEngine(): AutomationEngineState {
       }
     });
 
-    // Build manual PvP target list from stored victories
+    // Build manual PvP target list from stored victories.
+    // Sort by lastBattleDate ascending so the least-recently-fought rival
+    // comes first — this rotates targets instead of hammering the same one.
     const pvpTargetList =
       config.manual_pvp && pvpRivals
         ? pvpRivals
             .filter((r: any) => r.lastResult !== "LOSS")
+            .sort((a: any, b: any) => {
+              const dateA = a.lastBattleDate ? new Date(a.lastBattleDate).getTime() : 0;
+              const dateB = b.lastBattleDate ? new Date(b.lastBattleDate).getTime() : 0;
+              return dateA - dateB;
+            })
             .map((r: any) => ({
               rivalGameId: r.rivalGameId,
               rivalName: r.rivalName,
