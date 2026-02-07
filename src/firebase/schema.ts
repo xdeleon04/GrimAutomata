@@ -64,6 +64,7 @@ export interface PvPRival {
   rivalName: string; // In-game name
   rivalGameId: string; // Numeric game ID from gegnerid
   rivalRace?: string; // 'Vampiro' | 'Hombre Lobo' if known
+  syncedFightIds?: string[];
   wins: number; // Total victories against this rival
   losses: number; // Total defeats (0 if only tracking wins)
   totalGoldLooted: number;

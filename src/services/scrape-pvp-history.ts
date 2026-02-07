@@ -146,7 +146,7 @@ export async function scrapePvpHistory(
   const allListEntries: MessageListEntry[] = [];
   const seenFightIds = new Set<string>();
   let countOffset = 0;
-  const MAX_PAGES = 20; // Safety limit
+  const MAX_PAGES = 50; // Safety limit
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const listUrl = `https://${server}/index.php?ac=nachrichten&sac=angriff&count=${countOffset}`;

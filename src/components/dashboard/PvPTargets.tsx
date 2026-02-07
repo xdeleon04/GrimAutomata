@@ -109,7 +109,7 @@ export default function PvPTargets({ manualPvpStatus }: PvPTargetsProps) {
   }
 
   return (
-    <Card className="gothic-border bg-card/50 h-full flex flex-col">
+    <Card className="gothic-border bg-card/50 h-[65vh] min-h-[500px] flex flex-col">
       <CardHeader className="pb-3 border-b border-border/40">
         <CardTitle className="font-headline tracking-widest text-[#d8d8d8] flex items-center gap-2 text-sm uppercase">
           <Crosshair className="h-4 w-4 text-accent" />
