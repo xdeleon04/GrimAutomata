@@ -27,7 +27,7 @@ const PvPTargets = dynamic(
 
 export default function PvPPage() {
   return (
-    <div className="space-y-6 h-[calc(100vh-180px)] animate-in fade-in slide-in-from-bottom-4">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
       <div className="flex items-center gap-3">
         <Crosshair className="w-8 h-8 text-accent" />
         <h1 className="text-3xl font-headline text-accent">Shadow Marks</h1>

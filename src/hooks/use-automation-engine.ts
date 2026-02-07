@@ -72,10 +72,12 @@ export function useAutomationEngine(): AutomationEngineState {
     // Build manual PvP target list from stored victories
     const pvpTargetList =
       config.manual_pvp && pvpRivals
-        ? pvpRivals.map((r: any) => ({
-            rivalGameId: r.rivalGameId,
-            rivalName: r.rivalName,
-          }))
+        ? pvpRivals
+            .filter((r: any) => r.lastResult !== "LOSS")
+            .map((r: any) => ({
+              rivalGameId: r.rivalGameId,
+              rivalName: r.rivalName,
+            }))
         : [];
 
     try {
