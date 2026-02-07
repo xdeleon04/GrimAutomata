@@ -1,13 +1,14 @@
-'use server';
+"use server";
 /**
  * @fileOverview A flow to fetch real data and execute automations in MonstersGame.
- * 
+ *
  * - syncMoonId - Orchestrates the retrieval of character stats and execution of rituals.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
-import { fetchMonstersGameData } from '@/services/monsters-game';
+import { ai } from "@/ai/genkit";
+import { z } from "genkit";
+import { fetchMonstersGameData } from "@/services/monsters-game";
+import { decrypt } from "@/services/crypto";
 
 const MoonIdSyncInputSchema = z.object({
   username: z.string(),
@@ -19,13 +20,24 @@ const MoonIdSyncInputSchema = z.object({
 export type MoonIdSyncInput = z.infer<typeof MoonIdSyncInputSchema>;
 
 const MoonIdSyncOutputSchema = z.object({
-  race: z.enum(['Vampire', 'Werewolf']),
+  race: z.enum(["Vampire", "Werewolf"]),
   pvpCooldown: z.number().default(0),
-  logs: z.array(z.object({
-    type: z.enum(['INFO', 'BATTLE', 'TRAINING', 'LOOT', 'ERROR', 'MANHUNT', 'MISSION', 'DEBUG']),
-    message: z.string(),
-    timestamp: z.string(),
-  })),
+  logs: z.array(
+    z.object({
+      type: z.enum([
+        "INFO",
+        "BATTLE",
+        "TRAINING",
+        "LOOT",
+        "ERROR",
+        "MANHUNT",
+        "MISSION",
+        "DEBUG",
+      ]),
+      message: z.string(),
+      timestamp: z.string(),
+    }),
+  ),
   stats: z.object({
     level: z.number(),
     gold: z.number(),
@@ -45,29 +57,36 @@ const MoonIdSyncOutputSchema = z.object({
 });
 export type MoonIdSyncOutput = z.infer<typeof MoonIdSyncOutputSchema>;
 
-export async function syncMoonId(input: MoonIdSyncInput): Promise<MoonIdSyncOutput> {
+export async function syncMoonId(
+  input: MoonIdSyncInput,
+): Promise<MoonIdSyncOutput> {
   return moonIdSyncFlow(input);
 }
 
 const moonIdSyncFlow = ai.defineFlow(
   {
-    name: 'moonIdSyncFlow',
+    name: "moonIdSyncFlow",
     inputSchema: MoonIdSyncInputSchema,
     outputSchema: MoonIdSyncOutputSchema,
   },
   async (input) => {
+    const decryptedPassword = input.password
+      ? await decrypt(input.password)
+      : "";
     const gameData = await fetchMonstersGameData(
-      input.username, 
-      input.password || '', 
+      input.username,
+      decryptedPassword,
       input.server,
       input.debug,
-      input.settings || {}
+      input.settings || {},
     );
-    
+
     if (!gameData) {
-      throw new Error('Ritual Failed: The realm remained closed. Check your MoonID credentials.');
+      throw new Error(
+        "Ritual Failed: The realm remained closed. Check your MoonID credentials.",
+      );
     }
 
     return gameData;
-  }
+  },
 );

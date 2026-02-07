@@ -7,8 +7,8 @@ service cloud.firestore {
      * GRIMAUTOMATA SECURITY RULES
      *
      * Core Philosophy:
-     * This ruleset implements a strict user-ownership model where all data is hierarchically 
-     * organized under the user's unique identifier. Security is enforced by verifying the 
+     * This ruleset implements a strict user-ownership model where all data is hierarchically
+     * organized under the user's unique identifier. Security is enforced by verifying the
      * requester's identity against the document path.
      */
 
@@ -25,7 +25,8 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /users/{userId} {
-      allow get, list: if true;
+      allow get: if isOwner(userId);
+      allow list: if false;
       allow create, update, delete: if isOwner(userId);
 
       match /moonIdCredentials/{credentialId} {

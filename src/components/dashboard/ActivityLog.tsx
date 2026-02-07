@@ -1,77 +1,104 @@
+"use client";
 
-"use client"
-
-import React, { useState, useEffect, useRef } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Terminal, Shield, Swords, Coins, TrendingUp, AlertCircle, Ghost, MapPin, Skull, Bug } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Terminal,
+  Shield,
+  Swords,
+  Coins,
+  TrendingUp,
+  AlertCircle,
+  Ghost,
+  MapPin,
+  Skull,
+  Bug,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useUser } from "@/firebase";
+import { useActivityLogs } from "@/components/dashboard/DashboardDataProvider";
 
 export function ActivityLog() {
   const { user } = useUser();
-  const db = useFirestore();
+  const { data: logs, isLoading } = useActivityLogs();
   const [currentTime, setCurrentTime] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setCurrentTime(new Date().toLocaleTimeString('en-GB', { 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit' 
-    }));
+    setCurrentTime(
+      new Date().toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+    );
     const interval = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString('en-GB', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit' 
-      }));
+      setCurrentTime(
+        new Date().toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+      );
     }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const logsQuery = useMemoFirebase(() => {
-    if (!db || !user) return null;
-    return query(
-      collection(db, 'users', user.uid, 'activityLogs'),
-      orderBy('timestamp', 'desc'),
-      limit(100)
-    );
-  }, [db, user]);
-
-  const { data: logs, isLoading } = useCollection(logsQuery);
-
   // Auto-scroll to bottom when logs update
   useEffect(() => {
     if (scrollRef.current) {
-      const scrollContainer = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      const scrollContainer = scrollRef.current.querySelector(
+        "[data-radix-scroll-area-viewport]",
+      );
       if (scrollContainer) {
         scrollContainer.scrollTop = scrollContainer.scrollHeight;
       }
     }
   }, [logs]);
 
+  /**
+   * Log type icon mapping with consistent color scheme:
+   * - red-400/500: combat/errors
+   * - blue-400: training/growth
+   * - orange-400: manhunt
+   * - purple-400: missions/debug
+   * - accent: loot/rewards
+   * - muted-foreground: info/default
+   */
   const getIcon = (type: string) => {
     switch (type.toLowerCase()) {
-      case 'battle': return <Swords className="w-4 h-4 text-red-400" />;
-      case 'training': return <TrendingUp className="w-4 h-4 text-blue-400" />;
-      case 'loot': return <Coins className="w-4 h-4 text-accent" />;
-      case 'manhunt': return <Skull className="w-4 h-4 text-orange-400" />;
-      case 'mission': return <MapPin className="w-4 h-4 text-purple-400" />;
-      case 'info': return <Terminal className="w-4 h-4 text-muted-foreground" />;
-      case 'error': return <AlertCircle className="w-4 h-4 text-red-500" />;
-      case 'debug': return <Bug className="w-4 h-4 text-purple-400" />;
-      default: return <Ghost className="w-4 h-4 text-muted-foreground" />;
+      case "battle":
+        return <Swords className="w-4 h-4 text-red-400" />;
+      case "training":
+        return <TrendingUp className="w-4 h-4 text-blue-400" />;
+      case "loot":
+        return <Coins className="w-4 h-4 text-accent" />;
+      case "manhunt":
+        return <Skull className="w-4 h-4 text-orange-400" />;
+      case "mission":
+        return <MapPin className="w-4 h-4 text-purple-400" />;
+      case "info":
+        return <Terminal className="w-4 h-4 text-muted-foreground" />;
+      case "error":
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
+      case "debug":
+        return <Bug className="w-4 h-4 text-purple-400" />;
+      default:
+        return <Ghost className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
   const formatTimestamp = (ts: any) => {
-    if (!ts) return '';
+    if (!ts) return "";
     try {
       const date = new Date(ts);
-      return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return date.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
     } catch {
-      return '--:--:--';
+      return "--:--:--";
     }
   };
 
@@ -80,7 +107,7 @@ export function ActivityLog() {
   const displayLogs = logs ? [...logs].reverse() : [];
 
   return (
-    <div className="flex flex-col h-[500px] xl:h-[600px] bg-card rounded-lg gothic-border overflow-hidden shadow-2xl">
+    <div className="flex flex-col h-[500px] xl:h-[600px] bg-card/50 rounded-lg gothic-border overflow-hidden shadow-2xl">
       <div className="p-4 border-b flex items-center justify-between bg-muted/50">
         <h2 className="text-sm font-bold uppercase tracking-widest text-accent flex items-center gap-2">
           <Terminal className="w-4 h-4" /> Ritual Chronicles
@@ -88,38 +115,55 @@ export function ActivityLog() {
         <div className="flex items-center gap-3">
           <span className="animate-pulse w-2 h-2 rounded-full bg-accent" />
           <span className="text-[10px] text-muted-foreground font-mono">
-            {isLoading ? 'INVOKING...' : 'REALTIME_SYNC_OK'}
+            {isLoading ? "INVOKING..." : "REALTIME_SYNC_OK"}
           </span>
         </div>
       </div>
-      
-      <ScrollArea ref={scrollRef} className="flex-1 p-4 font-mono text-[13px] leading-relaxed log-scroll bg-black/20">
+
+      <ScrollArea
+        ref={scrollRef}
+        className="flex-1 p-4 font-mono text-[13px] leading-relaxed log-scroll bg-black/20"
+      >
         <div className="space-y-3 pb-4">
           {displayLogs.map((log) => (
-            <div key={log.id} className="group flex gap-3 animate-in fade-in slide-in-from-left-2 duration-300">
-              <span className="text-muted-foreground/40 whitespace-nowrap">[{formatTimestamp(log.timestamp)}]</span>
-              <span className="mt-0.5">{getIcon(log.logLevel || 'info')}</span>
-              <span className={cn(
-                "flex-1 break-words",
-                log.logLevel === 'ERROR' && "text-red-500",
-                log.logLevel === 'BATTLE' && "text-red-200",
-                log.logLevel === 'MANHUNT' && "text-orange-200",
-                log.logLevel === 'LOOT' && "text-accent/90",
-                log.logLevel === 'DEBUG' && "text-purple-400/80 italic text-[11px]"
-              )}>
+            <div
+              key={log.id}
+              className="group flex gap-3 animate-in fade-in slide-in-from-left-2 duration-300"
+            >
+              <span className="text-muted-foreground/40 whitespace-nowrap">
+                [{formatTimestamp(log.timestamp)}]
+              </span>
+              <span className="mt-0.5">{getIcon(log.logLevel || "info")}</span>
+              <span
+                className={cn(
+                  "flex-1 break-words",
+                  log.logLevel === "ERROR" && "text-red-500",
+                  log.logLevel === "BATTLE" && "text-red-200",
+                  log.logLevel === "MANHUNT" && "text-orange-200",
+                  log.logLevel === "LOOT" && "text-accent/90",
+                  log.logLevel === "DEBUG" &&
+                    "text-purple-400/80 italic text-[11px]",
+                )}
+              >
                 {log.logMessage}
               </span>
             </div>
           ))}
           {!isLoading && displayLogs.length === 0 && (
-            <div className="text-muted-foreground italic opacity-50">The grimoire is empty. Start the automata to begin the record.</div>
+            <div className="text-muted-foreground italic opacity-50">
+              The grimoire is empty. Start the automata to begin the record.
+            </div>
           )}
           <div className="flex gap-3 text-accent/60 animate-pulse pt-2 border-t border-accent/5">
             <span className="text-muted-foreground/40">
-              [{currentTime || '--:--:--'}]
+              [{currentTime || "--:--:--"}]
             </span>
-            <span className="mt-0.5"><Terminal className="w-4 h-4" /></span>
-            <span className="text-[11px] uppercase tracking-wider">Awaiting next shadow ritual...</span>
+            <span className="mt-0.5">
+              <Terminal className="w-4 h-4" />
+            </span>
+            <span className="text-[11px] uppercase tracking-wider">
+              Awaiting next shadow ritual...
+            </span>
           </div>
         </div>
       </ScrollArea>

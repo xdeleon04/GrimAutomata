@@ -1,12 +1,45 @@
+"use client";
 
-"use client"
+import React from "react";
+import dynamic from "next/dynamic";
+import { StatusHeader } from "@/components/dashboard/StatusHeader";
+import { QuickStats } from "@/components/dashboard/QuickStats";
 
-import React from 'react';
-import { StatusHeader } from '@/components/dashboard/StatusHeader';
-import { ActivityLog } from '@/components/dashboard/ActivityLog';
-import { ConfigPanel } from '@/components/dashboard/ConfigPanel';
-import { CredentialManager } from '@/components/dashboard/CredentialManager';
-import { QuickStats } from '@/components/dashboard/QuickStats';
+const ConfigPanel = dynamic(
+  () => import("@/components/dashboard/ConfigPanel").then((m) => m.ConfigPanel),
+  {
+    loading: () => (
+      <div className="h-64 flex items-center justify-center">
+        <span className="animate-pulse">Loading...</span>
+      </div>
+    ),
+  },
+);
+
+const ActivityLog = dynamic(
+  () => import("@/components/dashboard/ActivityLog").then((m) => m.ActivityLog),
+  {
+    loading: () => (
+      <div className="h-64 flex items-center justify-center">
+        <span className="animate-pulse">Loading...</span>
+      </div>
+    ),
+  },
+);
+
+const CredentialManager = dynamic(
+  () =>
+    import("@/components/dashboard/CredentialManager").then(
+      (m) => m.CredentialManager,
+    ),
+  {
+    loading: () => (
+      <div className="h-32 flex items-center justify-center">
+        <span className="animate-pulse">Loading...</span>
+      </div>
+    ),
+  },
+);
 
 export function Dashboard() {
   return (

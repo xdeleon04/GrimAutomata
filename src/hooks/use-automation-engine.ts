@@ -1,0 +1,183 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  useUser,
+  useFirestore,
+  useMemoFirebase,
+  setDocumentNonBlocking,
+} from "@/firebase";
+import { doc, collection, serverTimestamp } from "firebase/firestore";
+import { syncMoonId } from "@/ai/flows/moon-id-sync-flow";
+import {
+  useCredentials,
+  useAutomationSettings,
+} from "@/components/dashboard/DashboardDataProvider";
+
+export interface AutomationEngineState {
+  isRunning: boolean;
+  uptime: number;
+  isSyncing: boolean;
+  debugMode: boolean;
+  cooldown: number;
+  credentials: any;
+  handleToggle: () => void;
+  setDebugMode: (value: boolean) => void;
+}
+
+export function useAutomationEngine(): AutomationEngineState {
+  const { user } = useUser();
+  const db = useFirestore();
+  const [isRunning, setIsRunning] = useState(false);
+  const [uptime, setUptime] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  const lastSyncRef = useRef<number>(0);
+  const isSyncingRef = useRef<boolean>(false);
+  const cooldownRef = useRef<number>(0);
+  const initialSyncRequiredRef = useRef<boolean>(false);
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return doc(db, "users", user.uid);
+  }, [db, user]);
+
+  const { data: credentials } = useCredentials();
+  const { data: settings } = useAutomationSettings();
+
+  const triggerSync = useCallback(async () => {
+    if (!user || !db || !credentials || !userDocRef || isSyncingRef.current)
+      return;
+
+    isSyncingRef.current = true;
+    initialSyncRequiredRef.current = false;
+    setIsSyncing(true);
+    lastSyncRef.current = Date.now();
+
+    const config: Record<string, any> = {};
+    settings?.forEach((s: any) => {
+      try {
+        config[s.settingName] = JSON.parse(s.settingValue);
+      } catch {
+        config[s.settingName] = s.settingValue;
+      }
+    });
+
+    try {
+      const result = await syncMoonId({
+        username: credentials.moonIdUsername,
+        password: credentials.encryptedMoonIdPassword,
+        server: credentials.description || "es1.monstersgame.moonid.net",
+        debug: debugMode,
+        settings: config,
+      });
+
+      cooldownRef.current = result.pvpCooldown;
+      setCooldown(result.pvpCooldown);
+
+      const updateData: any = {
+        id: user.uid,
+        race: result.race,
+        level: result.stats.level,
+        gold: result.stats.gold,
+        stamina: result.stats.stamina,
+        maxStamina: result.stats.maxStamina,
+        experience: result.stats.experience,
+        nextLevelExp: result.stats.nextLevelExp,
+        skillAverage: result.stats.skillAverage,
+        attributes: result.stats.attributes,
+        lastSync: serverTimestamp(),
+      };
+
+      setDocumentNonBlocking(userDocRef, updateData, { merge: true });
+
+      const logsRef = collection(db, "users", user.uid, "activityLogs");
+      result.logs.forEach((log) => {
+        const newLogRef = doc(logsRef);
+        setDocumentNonBlocking(
+          newLogRef,
+          {
+            id: newLogRef.id,
+            userId: user.uid,
+            timestamp: log.timestamp,
+            logMessage: log.message,
+            logLevel: log.type,
+          },
+          { merge: true },
+        );
+      });
+    } catch {
+      // Handled by FirebaseErrorListener
+    } finally {
+      isSyncingRef.current = false;
+      setIsSyncing(false);
+    }
+  }, [user, db, credentials, userDocRef, settings, debugMode]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isRunning) {
+      interval = setInterval(() => {
+        setUptime((prev) => prev + 1);
+
+        let currentCooldown = 0;
+        let justFinished = false;
+
+        setCooldown((prev) => {
+          currentCooldown = Math.max(0, prev - 1);
+          if (prev > 0 && currentCooldown === 0) {
+            justFinished = true;
+          }
+          cooldownRef.current = currentCooldown;
+          return currentCooldown;
+        });
+
+        const now = Date.now();
+        const secondsSinceLastSync =
+          lastSyncRef.current === 0
+            ? Infinity
+            : (now - lastSyncRef.current) / 1000;
+
+        const shouldTrigger =
+          initialSyncRequiredRef.current ||
+          justFinished ||
+          (cooldownRef.current === 0 && secondsSinceLastSync >= 60);
+
+        if (shouldTrigger && !isSyncingRef.current) {
+          triggerSync();
+        }
+      }, 1000);
+    } else {
+      setUptime(0);
+      setCooldown(0);
+      cooldownRef.current = 0;
+      lastSyncRef.current = 0;
+      initialSyncRequiredRef.current = false;
+      isSyncingRef.current = false;
+    }
+    return () => clearInterval(interval);
+  }, [isRunning, triggerSync]);
+
+  const handleToggle = () => {
+    const nextState = !isRunning;
+    if (nextState) {
+      initialSyncRequiredRef.current = true;
+      lastSyncRef.current = 0;
+      isSyncingRef.current = false;
+    }
+    setIsRunning(nextState);
+  };
+
+  return {
+    isRunning,
+    uptime,
+    isSyncing,
+    debugMode,
+    cooldown,
+    credentials,
+    handleToggle,
+    setDebugMode,
+  };
+}

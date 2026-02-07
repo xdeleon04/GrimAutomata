@@ -1,11 +1,12 @@
-import 'whatwg-fetch'
-import '@testing-library/jest-dom'
+/* eslint-disable @typescript-eslint/no-require-imports */
+import "whatwg-fetch";
+import "@testing-library/jest-dom";
 
-global.setImmediate = require('timers').setImmediate;
+global.setImmediate = require("timers").setImmediate;
 
-Object.defineProperty(window, 'matchMedia', {
+Object.defineProperty(window, "matchMedia", {
   writable: true,
-  value: jest.fn().mockImplementation(query => ({
+  value: jest.fn().mockImplementation((query) => ({
     matches: false,
     media: query,
     onchange: null,
