@@ -26,6 +26,50 @@ function parseMGNumber(str: string | null): number {
   return parseFloat(normalized) || 0;
 }
 
+/**
+ * Entry parsed from the messages listing page.
+ */
+interface MessageListEntry {
+  fightId: string;
+  rivalName: string;
+  rivalGameId: string;
+  date: string;
+  winnerName: string;
+  gold: number;
+}
+
+/**
+ * Parse fight entries from a messages listing page HTML.
+ * Each row: date | rival link (showuserid) | winner name | gold | report link (fightid)
+ */
+function parseMessageListPage(html: string): MessageListEntry[] {
+  const entries: MessageListEntry[] = [];
+
+  // Match each table row that contains a fight report link
+  const rowRegex = /<tr>\s*<td>\s*del dia\s+(.+?)<\/td>\s*<td><a\s+href="index\.php\?ac=showuser&(?:amp;)?showuserid=(\d+)">([^<]+)<\/a><\/td>\s*<td>([^<]*)<\/td>\s*<td>([\d,.]+)\s*<img[^>]+alt=["']Oro["'][^>]*><\/td>\s*<td><a\s+href="index\.php\?ac=fightreport&(?:amp;)?fightid=(\d+)&(?:amp;)?sac=angriff">/gi;
+
+  let match: RegExpExecArray | null;
+  while ((match = rowRegex.exec(html)) !== null) {
+    entries.push({
+      date: match[1].trim(),
+      rivalGameId: match[2],
+      rivalName: match[3].trim(),
+      winnerName: match[4].trim(),
+      gold: parseMGNumber(match[5]),
+      fightId: match[6],
+    });
+  }
+
+  return entries;
+}
+
+/**
+ * Scrapes PvP battle history from MonstersGame attack messages.
+ *
+ * 1. Authenticates via MoonID
+ * 2. Paginates through all attack messages (count=0, count=10, count=20...)
+ * 3. For each fight, fetches the detailed report to get accurate win/loss, gold, XP, rival race
+ */
 export async function scrapePvpHistory(
   username: string,
   encryptedPassword: string,
@@ -53,6 +97,7 @@ export async function scrapePvpHistory(
     });
   };
 
+  // --- AUTH: MoonID login + redirect chain ---
   const preAuthResponse = await fetch("https://moonid.net/account/login/", {
     headers: { "User-Agent": userAgent },
   });
@@ -97,92 +142,125 @@ export async function scrapePvpHistory(
     currentUrl = res.headers.get("Location");
   }
 
-  const fightIdRegex =
-    /ac=fightreport&(?:amp;)?fightid=(\d+)&(?:amp;)?sac=angriff/gi;
-  const baseMessagesUrl = `https://${server}/index.php?ac=nachrichten&sac=angriff`;
-  const seenOffsets = new Set<number>();
-  const pendingOffsets: number[] = [0];
+  // --- STEP 1: Paginate through all attack messages ---
+  const allListEntries: MessageListEntry[] = [];
   const seenFightIds = new Set<string>();
+  let countOffset = 0;
+  const MAX_PAGES = 20; // Safety limit
 
-  while (pendingOffsets.length > 0) {
-    const offset = pendingOffsets.shift();
-    if (offset === undefined || seenOffsets.has(offset)) continue;
-    seenOffsets.add(offset);
-
-    const pageUrl = offset > 0 ? `${baseMessagesUrl}&s=${offset}` : baseMessagesUrl;
-    const pageRes = await fetch(pageUrl, {
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const listUrl = `https://${server}/index.php?ac=nachrichten&sac=angriff&count=${countOffset}`;
+    const listRes = await fetch(listUrl, {
       headers: { Cookie: getCookieString(), "User-Agent": userAgent },
     });
-    const pageHtml = await pageRes.text();
+    const listHtml = await listRes.text();
 
-    const offsetRegex = /(?:[?&]|&amp;)s=(\d+)/gi;
-    let offsetMatch: RegExpExecArray | null;
-    while ((offsetMatch = offsetRegex.exec(pageHtml)) !== null) {
-      const nextOffset = parseInt(offsetMatch[1]);
-      if (!Number.isNaN(nextOffset) && !seenOffsets.has(nextOffset)) {
-        pendingOffsets.push(nextOffset);
+    const pageEntries = parseMessageListPage(listHtml);
+
+    // Add entries we haven't seen yet
+    let newOnThisPage = 0;
+    for (const entry of pageEntries) {
+      if (!seenFightIds.has(entry.fightId)) {
+        seenFightIds.add(entry.fightId);
+        allListEntries.push(entry);
+        newOnThisPage++;
       }
     }
 
-    fightIdRegex.lastIndex = 0;
-    const pageFightIds: string[] = [];
-    let fightMatch: RegExpExecArray | null;
-    while ((fightMatch = fightIdRegex.exec(pageHtml)) !== null) {
-      pageFightIds.push(fightMatch[1]);
-    }
+    // Check if there's a next page link
+    const hasNextPage = listHtml.includes(`count=${countOffset + 10}`);
 
-    const newFightIds = pageFightIds.filter((id) => !seenFightIds.has(id));
-    newFightIds.forEach((id) => seenFightIds.add(id));
-
-    if (newFightIds.length === 0) {
+    if (newOnThisPage === 0 || !hasNextPage) {
       break;
     }
+
+    countOffset += 10;
   }
 
-  const results: ScrapedPvpResult[] = [];
-  const fightIds = Array.from(seenFightIds);
+  if (allListEntries.length === 0) {
+    return [];
+  }
 
-  for (const fightId of fightIds) {
+  // --- STEP 2: Fetch each fight report for detailed data ---
+  const results: ScrapedPvpResult[] = [];
+
+  for (const entry of allListEntries) {
     try {
-      const reportUrl = `https://${server}/index.php?ac=fightreport&fightid=${fightId}&sac=angriff`;
+      const reportUrl = `https://${server}/index.php?ac=fightreport&fightid=${entry.fightId}&sac=angriff`;
       const reportRes = await fetch(reportUrl, {
         headers: { Cookie: getCookieString(), "User-Agent": userAgent },
       });
       const reportHtml = await reportRes.text();
 
-      const rivalName = reportHtml
-        .match(/sac=info&(?:amp;)?id=\d+[^>]*>([^<]+)<\/a>/i)?.[1]
-        ?.trim();
-      const rivalGameId = reportHtml.match(/sac=info&(?:amp;)?id=(\d+)/i)?.[1];
-      const isWinner =
-        reportHtml.includes("headerRowCWinner") || reportHtml.includes("ganado");
-      const goldLooted = parseMGNumber(
-        reportHtml.match(
-          /Ha conseguido ([\d,.]+)\s*<img[^>]+alt=["']Oro["']/i,
-        )?.[1] || "0",
+      // Parse winner name from header
+      const winnerMatch = reportHtml.match(
+        /class="headerRowCWinner"[^>]*>Vencedor\/a:\s*([^<]+)</i,
       );
-      const xpEarned = parseMGNumber(
-        reportHtml.match(
-          /([\d,.]+)\s+(?:experience\s+points|punto\(?s?\)?\s+de\s+experiencia|puntos\s+de\s+experiencia|experiencia|puntos\s+de\s+exp|experience)/i,
-        )?.[1] || "0",
-      );
-      const rivalRace = reportHtml.match(
-        /<div class="headerRow[^"]*">(Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)/i,
-      )?.[1];
+      const winnerName = winnerMatch ? winnerMatch[1].trim() : "";
 
-      if (!rivalName || !rivalGameId) continue;
+      // Parse both players from the "tdh" vs row
+      // Left side = our character, Right side = rival
+      const vsMatch = reportHtml.match(
+        /class="tdh"[^>]*>(Vampiro|Vampira|Hombre Lobo)\s+([^<]+)<\/td>\s*<td[^>]*>vs\.\s*<\/td>\s*<td[^>]*class="tdh"[^>]*>(Vampiro|Vampira|Hombre Lobo)\s+([^<]+)<\/td>/i,
+      );
+
+      let ourName = "";
+      let rivalName = entry.rivalName;
+      let rivalRace = "";
+
+      if (vsMatch) {
+        ourName = vsMatch[2].trim();
+        rivalRace = vsMatch[3].trim();
+        rivalName = vsMatch[4].trim();
+      }
+
+      // Determine win/loss
+      const isWinner = winnerName !== "" && ourName !== "" && winnerName === ourName;
+
+      // Parse gold: "Ha conseguido N <img...alt='Oro'>" - this is what the WINNER got
+      const goldMatch = reportHtml.match(
+        /Ha conseguido\s+([\d,.]+)\s*<img[^>]+alt=["']Oro["']/i,
+      );
+      const winnerGold = parseMGNumber(goldMatch?.[1] || "0");
+      const goldLooted = isWinner ? winnerGold : 0;
+
+      // Parse XP for our character
+      // Pattern: "A OURNAME le han sido sumados N punto(s) de experiencia"
+      let xpEarned = 0;
+      if (ourName) {
+        const escapedName = ourName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const xpRegex = new RegExp(
+          `A\\s+${escapedName}\\s+le han sido sumados\\s+([\\d,.]+)\\s+punto`,
+          "i",
+        );
+        const xpMatch = reportHtml.match(xpRegex);
+        xpEarned = parseMGNumber(xpMatch?.[1] || "0");
+      }
+
+      // Parse timestamp from report header
+      const timestampMatch = reportHtml.match(
+        /(?:del dia|del día)\s+(\d{2}\.\d{2}\.\d{4})\s+a las\s+(\d{2}:\d{2}:\d{2})/i,
+      );
+      let timestamp = new Date().toISOString();
+      if (timestampMatch) {
+        const [day, month, year] = timestampMatch[1].split(".");
+        timestamp = new Date(
+          `${year}-${month}-${day}T${timestampMatch[2]}`,
+        ).toISOString();
+      }
 
       results.push({
-        fightId,
+        fightId: entry.fightId,
         rivalName,
-        rivalGameId,
+        rivalGameId: entry.rivalGameId,
         rivalRace,
         isWinner,
         goldLooted,
         xpEarned,
-        timestamp: new Date().toISOString(),
+        timestamp,
       });
     } catch {
+      // Skip individual report errors, continue with next
       continue;
     }
   }
