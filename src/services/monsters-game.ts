@@ -23,6 +23,7 @@ export interface MonstersGameStats {
   stats: {
     level: number;
     gold: number;
+    blood: number;
     stamina: number;
     maxStamina: number;
     experience: number;
@@ -1050,6 +1051,9 @@ export async function fetchMonstersGameData(
         gold: parseMGNumber(
           html.match(/id=["']goldbalance["'][^>]*>([\d,.]+)</i)?.[1] || "0",
         ),
+        blood: parseMGNumber(
+          html.match(/id=["']bloodbalance["'][^>]*>([\d,.]+)</i)?.[1] || "0",
+        ),
         stamina: finalStamina,
         maxStamina: finalMaxStamina,
         experience: parseMGNumber(
@@ -1088,6 +1092,7 @@ export async function fetchMonstersGameData(
       stats: {
         level: 0,
         gold: 0,
+        blood: 0,
         stamina: 0,
         maxStamina: 100,
         experience: 0,

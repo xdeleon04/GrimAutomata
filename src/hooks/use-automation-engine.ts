@@ -108,6 +108,7 @@ export function useAutomationEngine(): AutomationEngineState {
         race: result.race,
         level: result.stats.level,
         gold: result.stats.gold,
+        blood: result.stats.blood,
         stamina: result.stats.stamina,
         maxStamina: result.stats.maxStamina,
         experience: result.stats.experience,

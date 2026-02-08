@@ -11,6 +11,7 @@ export interface UserProfile {
   race?: "Vampire" | "Werewolf";
   level?: number;
   gold?: number;
+  blood?: number;
   stamina?: number;
   maxStamina?: number;
   experience?: number;

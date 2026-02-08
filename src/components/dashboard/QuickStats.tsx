@@ -43,6 +43,7 @@ export function QuickStats() {
     race: userData?.race || "Vampire",
     level: userData?.level ?? 0,
     gold: userData?.gold ?? 0,
+    blood: userData?.blood ?? 0,
     stamina: userData?.stamina ?? 0,
     maxStamina: userData?.maxStamina ?? 100,
     experience: userData?.experience ?? 0,
@@ -75,9 +76,10 @@ export function QuickStats() {
           progressLabel={`XP: ${stats.experience.toLocaleString()} / ${stats.nextLevelExp.toLocaleString()} (${xpPercent}%)`}
         />
         <StatCard
-          label="Blood Gold"
+          label="Blood & Gold"
           value={stats.gold.toLocaleString()}
           icon={CoinsIcon}
+          progressLabel={`${stats.blood.toLocaleString()} Blood Crystals`}
         />
         <StatCard
           label="Health"
