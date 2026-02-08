@@ -221,8 +221,10 @@ export async function fetchMonstersGameData(
     const stamina = statbar.stamina;
     const maxStamina = statbar.maxStamina;
 
-    const staminaReservePercent = parseInt(settings.stamina_reserve || "10");
-    const thresholdValue = (staminaReservePercent / 100) * maxStamina;
+    const workThresholdPercent = parseInt(settings.stamina_reserve || "10");
+    const workThreshold = (workThresholdPercent / 100) * maxStamina;
+    const alchemyThresholdPercent = parseInt(settings.alchemy_threshold || "30");
+    const alchemyThreshold = (alchemyThresholdPercent / 100) * maxStamina;
 
     const race = detectRace(html);
     let currentGold = statbar.gold;
@@ -359,7 +361,7 @@ export async function fetchMonstersGameData(
     // --- STEP 2: AUTOMATION RITUALS ---
     if (pvpCooldown <= 0 && !isWorking && !isInMission && !isManhunting) {
       // Alchemy Check
-      if (stamina <= thresholdValue && settings.auto_alchemy) {
+      if (stamina <= alchemyThreshold && settings.auto_alchemy) {
         const budget = parseInt(settings.potion_budget || "445");
         const targetPotion =
           findBestPotion(currentGold, budget) ||
@@ -433,8 +435,8 @@ export async function fetchMonstersGameData(
       // Check final stamina after potential alchemy
       const currentStamina = parseStatbar(html).stamina;
 
-      if (currentStamina <= thresholdValue && settings.auto_work !== false) {
-        const pointsNeeded = Math.max(0, thresholdValue - currentStamina + 10);
+      if (currentStamina <= workThreshold && settings.auto_work !== false) {
+        const pointsNeeded = Math.max(0, workThreshold - currentStamina + 10);
         const hoursToWork = Math.min(
           12,
           Math.max(1, Math.ceil(pointsNeeded / 10)),
