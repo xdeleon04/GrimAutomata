@@ -1,6 +1,13 @@
 "use server";
 
 import { decrypt } from "@/services/crypto";
+import { authenticateMoonId } from "./monsters-game";
+import {
+  MG_REGEX,
+  MG_ROUTES,
+  buildUrl,
+  parseEuropeanNumber,
+} from "./mg-selectors";
 
 export interface ScrapedPvpResult {
   fightId: string;
@@ -11,19 +18,6 @@ export interface ScrapedPvpResult {
   goldLooted: number;
   xpEarned: number;
   timestamp: string;
-}
-
-/**
- * Normalizes European number formatting (e.g., 66.876,06 -> 66876.06)
- */
-function parseMGNumber(str: string | null): number {
-  if (!str) return 0;
-  const normalized = str
-    .trim()
-    .replace(/\s/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  return parseFloat(normalized) || 0;
 }
 
 /**
@@ -46,7 +40,8 @@ function parseMessageListPage(html: string): MessageListEntry[] {
   const entries: MessageListEntry[] = [];
 
   // Match each table row that contains a fight report link
-  const rowRegex = /<tr>\s*<td>\s*del dia\s+(.+?)<\/td>\s*<td><a\s+href="index\.php\?ac=showuser&(?:amp;)?showuserid=(\d+)">([^<]+)<\/a><\/td>\s*<td>([^<]*)<\/td>\s*<td>([\d,.]+)\s*<img[^>]+alt=["']Oro["'][^>]*><\/td>\s*<td><a\s+href="index\.php\?ac=fightreport&(?:amp;)?fightid=(\d+)&(?:amp;)?sac=angriff">/gi;
+  const rowRegex =
+    /<tr>\s*<td>\s*del dia\s+(.+?)<\/td>\s*<td><a\s+href="index\.php\?ac=showuser&(?:amp;)?showuserid=(\d+)">([^<]+)<\/a><\/td>\s*<td>([^<]*)<\/td>\s*<td>([\d,.]+)\s*<img[^>]+alt=["']Oro["'][^>]*><\/td>\s*<td><a\s+href="index\.php\?ac=fightreport&(?:amp;)?fightid=(\d+)&(?:amp;)?sac=angriff">/gi;
 
   let match: RegExpExecArray | null;
   while ((match = rowRegex.exec(html)) !== null) {
@@ -55,7 +50,7 @@ function parseMessageListPage(html: string): MessageListEntry[] {
       rivalGameId: match[2],
       rivalName: match[3].trim(),
       winnerName: match[4].trim(),
-      gold: parseMGNumber(match[5]),
+      gold: parseEuropeanNumber(match[5]),
       fightId: match[6],
     });
   }
@@ -79,68 +74,10 @@ export async function scrapePvpHistory(
     ? await decrypt(encryptedPassword)
     : "";
 
-  const cookies: Map<string, string> = new Map();
-  const userAgent =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
-
-  const getCookieString = () =>
-    Array.from(cookies.entries())
-      .map(([key, value]) => `${key}=${value}`)
-      .join("; ");
-
-  const updateCookies = (setCookieHeaders: string[] | null) => {
-    if (!setCookieHeaders) return;
-    setCookieHeaders.forEach((header) => {
-      const part = header.split(";")[0];
-      const [key, ...valParts] = part.split("=");
-      if (key) cookies.set(key.trim(), valParts.join("="));
-    });
-  };
-
-  // --- AUTH: MoonID login + redirect chain ---
-  const preAuthResponse = await fetch("https://moonid.net/account/login/", {
-    headers: { "User-Agent": userAgent },
-  });
-  updateCookies(preAuthResponse.headers.getSetCookie());
-  const preAuthHtml = await preAuthResponse.text();
-  const csrfMatch = preAuthHtml.match(
-    /name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i,
-  );
-  const csrfToken = csrfMatch ? csrfMatch[1] : "";
-
-  const loginPayload = new URLSearchParams({
-    csrfmiddlewaretoken: csrfToken,
+  const { getCookieString, userAgent } = await authenticateMoonId(
     username,
-    password: decryptedPassword,
-    next: "/api/account/connect/83/",
-  });
-
-  const loginResponse = await fetch("https://moonid.net/account/login/", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Cookie: getCookieString(),
-      "User-Agent": userAgent,
-      Referer: "https://moonid.net/account/login/",
-      Origin: "https://moonid.net",
-    },
-    body: loginPayload,
-    redirect: "manual",
-  });
-  updateCookies(loginResponse.headers.getSetCookie());
-
-  let currentUrl = loginResponse.headers.get("Location");
-  while (currentUrl) {
-    if (currentUrl.startsWith("/")) {
-      currentUrl = `https://moonid.net${currentUrl}`;
-    }
-    const res = await fetch(currentUrl, {
-      headers: { Cookie: getCookieString(), "User-Agent": userAgent },
-      redirect: "manual",
-    });
-    updateCookies(res.headers.getSetCookie());
-    currentUrl = res.headers.get("Location");
-  }
+    decryptedPassword,
+  );
 
   // --- STEP 1: Paginate through all attack messages ---
   const allListEntries: MessageListEntry[] = [];
@@ -149,7 +86,10 @@ export async function scrapePvpHistory(
   const MAX_PAGES = 50; // Safety limit
 
   for (let page = 0; page < MAX_PAGES; page++) {
-    const listUrl = `https://${server}/index.php?ac=nachrichten&sac=angriff&count=${countOffset}`;
+    const listUrl = buildUrl(
+      server,
+      `${MG_ROUTES.MESSAGES_ATTACK}&count=${countOffset}`,
+    );
     const listRes = await fetch(listUrl, {
       headers: { Cookie: getCookieString(), "User-Agent": userAgent },
     });
@@ -186,16 +126,17 @@ export async function scrapePvpHistory(
 
   for (const entry of allListEntries) {
     try {
-      const reportUrl = `https://${server}/index.php?ac=fightreport&fightid=${entry.fightId}&sac=angriff`;
+      const reportUrl = buildUrl(
+        server,
+        `index.php?ac=fightreport&fightid=${entry.fightId}&sac=angriff`,
+      );
       const reportRes = await fetch(reportUrl, {
         headers: { Cookie: getCookieString(), "User-Agent": userAgent },
       });
       const reportHtml = await reportRes.text();
 
       // Parse winner name from header
-      const winnerMatch = reportHtml.match(
-        /class="headerRowCWinner"[^>]*>Vencedor\/a:\s*([^<]+)</i,
-      );
+      const winnerMatch = reportHtml.match(MG_REGEX.WINNER_BANNER);
       const winnerName = winnerMatch ? winnerMatch[1].trim() : "";
 
       // Parse both players from the "tdh" vs row
@@ -214,14 +155,20 @@ export async function scrapePvpHistory(
         rivalName = vsMatch[4].trim();
       }
 
+      if (!ourName) {
+        const profileNameMatch = reportHtml.match(MG_REGEX.PROFILE_NAME);
+        if (profileNameMatch) {
+          ourName = profileNameMatch[1].trim();
+        }
+      }
+
       // Determine win/loss
-      const isWinner = winnerName !== "" && ourName !== "" && winnerName === ourName;
+      const isWinner =
+        winnerName !== "" && ourName !== "" && winnerName === ourName;
 
       // Parse gold: "Ha conseguido N <img...alt='Oro'>" - this is what the WINNER got
-      const goldMatch = reportHtml.match(
-        /Ha conseguido\s+([\d,.]+)\s*<img[^>]+alt=["']Oro["']/i,
-      );
-      const winnerGold = parseMGNumber(goldMatch?.[1] || "0");
+      const goldMatch = reportHtml.match(MG_REGEX.LOOT_GOLD);
+      const winnerGold = parseEuropeanNumber(goldMatch?.[1] || "0");
       const goldLooted = isWinner ? winnerGold : 0;
 
       // Parse XP for our character
@@ -234,7 +181,7 @@ export async function scrapePvpHistory(
           "i",
         );
         const xpMatch = reportHtml.match(xpRegex);
-        xpEarned = parseMGNumber(xpMatch?.[1] || "0");
+        xpEarned = parseEuropeanNumber(xpMatch?.[1] || "0");
       }
 
       // Parse timestamp from report header

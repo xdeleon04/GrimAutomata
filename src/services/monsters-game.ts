@@ -83,7 +83,7 @@ export interface MonstersGameStats {
 /**
  * Authenticates with MoonID and returns session cookies for MonstersGame requests.
  */
-async function authenticateMoonId(
+export async function authenticateMoonId(
   username: string,
   password: string,
 ): Promise<{ getCookieString: () => string; userAgent: string }> {
