@@ -68,8 +68,9 @@ export interface PvPRival {
   syncedFightIds?: string[];
   wins: number; // Total victories against this rival
   losses: number; // Total defeats (0 if only tracking wins)
+  draws?: number; // Total draws
   totalGoldLooted: number;
   totalXpEarned: number;
   lastBattleDate: string; // ISO timestamp
-  lastResult: "WIN" | "LOSS";
+  lastResult: "WIN" | "LOSS" | "DRAW";
 }

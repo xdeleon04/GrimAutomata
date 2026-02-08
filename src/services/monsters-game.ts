@@ -27,6 +27,7 @@ import {
   findPotionInInventory,
   buildUrl,
 } from "./mg-selectors";
+import type { PvpOutcome } from "./mg-selectors";
 
 export interface MonstersGameStats {
   race: "Vampire" | "Werewolf";
@@ -66,6 +67,7 @@ export interface MonstersGameStats {
     rivalName: string;
     rivalGameId: string;
     rivalRace?: string;
+    result?: PvpOutcome;
     isWinner: boolean;
     goldLooted: number;
     xpEarned: number;
@@ -223,7 +225,9 @@ export async function fetchMonstersGameData(
 
     const workThresholdPercent = parseInt(settings.stamina_reserve || "10");
     const workThreshold = (workThresholdPercent / 100) * maxStamina;
-    const alchemyThresholdPercent = parseInt(settings.alchemy_threshold || "30");
+    const alchemyThresholdPercent = parseInt(
+      settings.alchemy_threshold || "30",
+    );
     const alchemyThreshold = (alchemyThresholdPercent / 100) * maxStamina;
 
     const race = detectRace(html);
@@ -571,13 +575,14 @@ export async function fetchMonstersGameData(
 
                 logs.push({
                   type: "BATTLE",
-                  message: `Manual PvP: ${battleResult.isWinner ? "VICTORY" : "DEFEAT"} vs ${rival.rivalName}. Loot: ${battleResult.goldLooted.toFixed(2)} gold, ${battleResult.xpEarned} XP.`,
+                  message: `Manual PvP: ${battleResult.result === "WIN" ? "VICTORY" : battleResult.result === "DRAW" ? "DRAW" : "DEFEAT"} vs ${rival.rivalName}. Loot: ${battleResult.goldLooted.toFixed(2)} gold, ${battleResult.xpEarned} XP.`,
                   timestamp: new Date().toISOString(),
                 });
                 pvpResults.push({
                   rivalName: rival.rivalName,
                   rivalGameId: rival.rivalGameId,
                   rivalRace: undefined,
+                  result: battleResult.result,
                   isWinner: battleResult.isWinner,
                   goldLooted: battleResult.goldLooted,
                   xpEarned: battleResult.xpEarned,
@@ -710,13 +715,14 @@ export async function fetchMonstersGameData(
                   cooldownReason = "PvP battle recovery";
                   logs.push({
                     type: "BATTLE",
-                    message: `PvP Ritual: ${battleResult.isWinner ? "VICTORY" : "DEFEAT"} vs ${resolvedRivalName}. Loot: ${battleResult.goldLooted.toFixed(2)} gold, ${battleResult.xpEarned} XP.`,
+                    message: `PvP Ritual: ${battleResult.result === "WIN" ? "VICTORY" : battleResult.result === "DRAW" ? "DRAW" : "DEFEAT"} vs ${resolvedRivalName}. Loot: ${battleResult.goldLooted.toFixed(2)} gold, ${battleResult.xpEarned} XP.`,
                     timestamp: new Date().toISOString(),
                   });
                   pvpResults.push({
                     rivalName: resolvedRivalName,
                     rivalGameId: gegnerIdMatch[1],
                     rivalRace,
+                    result: battleResult.result,
                     isWinner: battleResult.isWinner,
                     goldLooted: battleResult.goldLooted,
                     xpEarned: battleResult.xpEarned,
@@ -905,6 +911,7 @@ export async function fetchMonstersGameData(
                 rivalName: reportRivalName,
                 rivalGameId: reportRivalId,
                 rivalRace: reportRivalRace,
+                result: reportResult.result,
                 isWinner: reportResult.isWinner,
                 goldLooted: reportResult.goldLooted,
                 xpEarned: reportResult.xpEarned,

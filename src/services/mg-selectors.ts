@@ -4,6 +4,11 @@
  */
 
 // ============================================================================
+// PVP OUTCOME TYPE
+// ============================================================================
+export type PvpOutcome = "WIN" | "LOSS" | "DRAW";
+
+// ============================================================================
 // URL ROUTES
 // ============================================================================
 export const MG_ROUTES = {
@@ -427,22 +432,38 @@ export function parseAttributes(html: string): {
   };
 }
 
+/** Draw detection keywords (case-insensitive). */
+const DRAW_KEYWORDS = ["empates", "empate", "draw", "unentschieden"];
+
 /**
  * Parses battle result from fight report HTML.
  */
 export function parseBattleResult(html: string): {
+  result: PvpOutcome;
   isWinner: boolean;
   goldLooted: number;
   xpEarned: number;
 } {
   const winnerMatch = html.match(MG_REGEX.WINNER_BANNER);
   const winnerRaw = winnerMatch ? winnerMatch[1].trim() : "";
-  const winnerWithoutTags = winnerRaw.includes(">")
-    ? (winnerRaw.split(">").pop() || "").trim()
-    : winnerRaw;
+  // Strip any residual HTML tags
+  let winnerWithoutTags = winnerRaw.replace(/<[^>]*>/g, "").trim();
+  // Handle partial tag fragments (e.g., "/b> testuser" from regex capture)
+  if (winnerWithoutTags.includes(">")) {
+    winnerWithoutTags = (winnerWithoutTags.split(">").pop() || "").trim();
+  }
+  // Remove "Vencedor/a:" or similar prefix
   const winnerName = winnerWithoutTags.includes(":")
     ? winnerWithoutTags.split(":").slice(1).join(":").trim()
     : winnerWithoutTags;
+
+  // Detect draw: normalized winnerName matches any draw keyword
+  const normalizedWinner = winnerName.toLowerCase().trim();
+  const isDraw = DRAW_KEYWORDS.some((kw) => normalizedWinner === kw);
+
+  if (isDraw) {
+    return { result: "DRAW", isWinner: false, goldLooted: 0, xpEarned: 0 };
+  }
 
   const vsMatch = html.match(MG_REGEX.FIGHT_VS_ROW);
   let ourName = "";
@@ -452,8 +473,10 @@ export function parseBattleResult(html: string): {
 
   const isWinner =
     winnerName !== "" && ourName !== "" && winnerName === ourName;
+  const result: PvpOutcome = isWinner ? "WIN" : "LOSS";
 
   return {
+    result,
     isWinner,
     goldLooted: parseEuropeanNumber(html.match(MG_REGEX.LOOT_GOLD)?.[1] || "0"),
     xpEarned: parseEuropeanNumber(html.match(MG_REGEX.LOOT_XP)?.[1] || "0"),

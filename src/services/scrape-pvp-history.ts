@@ -7,13 +7,16 @@ import {
   MG_ROUTES,
   buildUrl,
   parseEuropeanNumber,
+  parseBattleResult,
 } from "./mg-selectors";
+import type { PvpOutcome } from "./mg-selectors";
 
 export interface ScrapedPvpResult {
   fightId: string;
   rivalName: string;
   rivalGameId: string;
   rivalRace?: string;
+  result?: PvpOutcome;
   isWinner: boolean;
   goldLooted: number;
   xpEarned: number;
@@ -134,44 +137,35 @@ export async function scrapePvpHistory(
       });
       const reportHtml = await reportRes.text();
 
-      // Parse winner name from header
-      const winnerMatch = reportHtml.match(MG_REGEX.WINNER_BANNER);
-      const winnerName = winnerMatch ? winnerMatch[1].trim() : "";
+      // Use centralized parseBattleResult for win/loss/draw detection
+      const battleResult = parseBattleResult(reportHtml);
 
-      // Parse both players from the "tdh" vs row
-      // Left side = our character, Right side = rival
+      // Parse both players from the "tdh" vs row for rival metadata
       const vsMatch = reportHtml.match(MG_REGEX.FIGHT_VS_ROW);
 
-      let ourName = "";
       let rivalName = entry.rivalName;
       let rivalRace = "";
 
       if (vsMatch) {
-        ourName = vsMatch[2].trim();
         rivalRace = vsMatch[3].trim();
         rivalName = vsMatch[4].trim();
       }
 
-      if (!ourName) {
-        const profileNameMatch = reportHtml.match(MG_REGEX.PROFILE_NAME);
-        if (profileNameMatch) {
-          ourName = profileNameMatch[1].trim();
-        }
+      // For non-draw battles, use per-character gold/XP parsing
+      let goldLooted = battleResult.goldLooted;
+      let xpEarned = battleResult.xpEarned;
+
+      // For losses/draws, the winner's gold belongs to the opponent
+      if (battleResult.result !== "WIN") {
+        goldLooted = 0;
       }
 
-      // Determine win/loss
-      const isWinner =
-        winnerName !== "" && ourName !== "" && winnerName === ourName;
-
-      // Parse gold: "Ha conseguido N <img...alt='Oro'>" - this is what the WINNER got
-      const goldMatch = reportHtml.match(MG_REGEX.LOOT_GOLD);
-      const winnerGold = parseEuropeanNumber(goldMatch?.[1] || "0");
-      const goldLooted = isWinner ? winnerGold : 0;
-
-      // Parse XP for our character
-      // Pattern: "A OURNAME le han sido sumados N punto(s) de experiencia"
-      let xpEarned = 0;
-      if (ourName) {
+      // Parse XP for our character specifically
+      let ourName = "";
+      if (vsMatch) {
+        ourName = vsMatch[2].trim();
+      }
+      if (ourName && battleResult.result !== "DRAW") {
         const escapedName = ourName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const xpRegex = new RegExp(
           `A\\s+${escapedName}\\s+le han sido sumados\\s+([\\d,.]+)\\s+punto`,
@@ -179,6 +173,8 @@ export async function scrapePvpHistory(
         );
         const xpMatch = reportHtml.match(xpRegex);
         xpEarned = parseEuropeanNumber(xpMatch?.[1] || "0");
+      } else if (battleResult.result === "DRAW") {
+        xpEarned = 0;
       }
 
       // Parse timestamp from report header
@@ -196,7 +192,8 @@ export async function scrapePvpHistory(
         rivalName,
         rivalGameId: entry.rivalGameId,
         rivalRace,
-        isWinner,
+        result: battleResult.result,
+        isWinner: battleResult.isWinner,
         goldLooted,
         xpEarned,
         timestamp,

@@ -1,10 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Users, Swords, Coins, TrendingUp, RefreshCw, Loader2 } from "lucide-react";
+import {
+  Users,
+  Swords,
+  Coins,
+  TrendingUp,
+  RefreshCw,
+  Loader2,
+} from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
 
-import { usePvPVictories, useCredentials } from "@/components/dashboard/DashboardDataProvider";
+import {
+  usePvPVictories,
+  useCredentials,
+} from "@/components/dashboard/DashboardDataProvider";
 import { useUser, useFirestore } from "@/firebase";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { scrapePvpHistory } from "@/services/scrape-pvp-history";
@@ -56,14 +66,18 @@ export default function PvPOverview() {
         totalLosses: 0,
         totalGold: 0,
         totalXp: 0,
-      } as PvPSummaryStats
+      } as PvPSummaryStats,
     );
   }, [victoryDocs]);
 
   const handleSync = async () => {
     if (!user || !db || !credentialsDoc) return;
 
-    if (!credentialsDoc?.moonIdUsername || !credentialsDoc?.encryptedMoonIdPassword || !credentialsDoc?.description) {
+    if (
+      !credentialsDoc?.moonIdUsername ||
+      !credentialsDoc?.encryptedMoonIdPassword ||
+      !credentialsDoc?.description
+    ) {
       toast({
         title: "Missing Credentials",
         description: "Please configure your MoonID credentials first.",
@@ -80,7 +94,7 @@ export default function PvPOverview() {
       const scrapedBattles = await scrapePvpHistory(
         credentialsDoc.moonIdUsername,
         credentialsDoc.encryptedMoonIdPassword,
-        credentialsDoc.description
+        credentialsDoc.description,
       );
 
       if (scrapedBattles.length === 0) {
@@ -102,16 +116,24 @@ export default function PvPOverview() {
       let rivalsUpdated = 0;
 
       for (const [rivalGameId, battles] of battlesByRival) {
-        const rivalDocRef = doc(db, "users", user.uid, "pvpVictories", rivalGameId);
+        const rivalDocRef = doc(
+          db,
+          "users",
+          user.uid,
+          "pvpVictories",
+          rivalGameId,
+        );
         const existingSnap = await getDoc(rivalDocRef);
         const existingData = existingSnap.exists() ? existingSnap.data() : null;
 
         // Get the set of already-synced fight IDs from this rival's doc
-        const alreadySynced = new Set<string>(existingData?.syncedFightIds || []);
+        const alreadySynced = new Set<string>(
+          existingData?.syncedFightIds || [],
+        );
         const updatedFightIds = new Set<string>(alreadySynced);
 
         // Filter to only truly new battles
-        const newBattles = battles.filter(b => !alreadySynced.has(b.fightId));
+        const newBattles = battles.filter((b) => !alreadySynced.has(b.fightId));
 
         if (newBattles.length === 0) continue;
 
@@ -122,8 +144,14 @@ export default function PvPOverview() {
         let newXp = 0;
 
         for (const battle of newBattles) {
-          if (battle.isWinner) newWins++;
-          else newLosses++;
+          if (battle.result === "WIN" || (!battle.result && battle.isWinner))
+            newWins++;
+          else if (
+            battle.result === "LOSS" ||
+            (!battle.result && !battle.isWinner)
+          )
+            newLosses++;
+          // DRAW: no increment to wins or losses
           newGold += battle.goldLooted;
           newXp += battle.xpEarned;
           updatedFightIds.add(battle.fightId);
@@ -140,7 +168,8 @@ export default function PvPOverview() {
           totalGoldLooted: (existingData?.totalGoldLooted || 0) + newGold,
           totalXpEarned: (existingData?.totalXpEarned || 0) + newXp,
           lastBattleDate: lastBattle.timestamp,
-          lastResult: lastBattle.isWinner ? "WIN" : "LOSS",
+          lastResult:
+            lastBattle.result || (lastBattle.isWinner ? "WIN" : "LOSS"),
           syncedFightIds: Array.from(updatedFightIds),
         };
 
@@ -152,7 +181,9 @@ export default function PvPOverview() {
       if (totalNew === 0) {
         setSyncStatus("No new battles found in recent messages.");
       } else {
-        setSyncStatus(`Synced ${totalNew} new battles from ${rivalsUpdated} opponents.`);
+        setSyncStatus(
+          `Synced ${totalNew} new battles from ${rivalsUpdated} opponents.`,
+        );
         toast({
           title: "Sync Complete",
           description: `Added ${totalNew} battles.`,
@@ -179,7 +210,9 @@ export default function PvPOverview() {
         <div className="bg-card/30 border border-border/30 rounded-lg p-3 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-muted-foreground mb-2">
             <Users className="h-4 w-4" />
-            <span className="text-xs font-medium uppercase tracking-wider">Rivals</span>
+            <span className="text-xs font-medium uppercase tracking-wider">
+              Rivals
+            </span>
           </div>
           <div className="text-2xl font-bold font-mono text-foreground">
             {stats.uniqueOpponents.toLocaleString()}
@@ -190,12 +223,18 @@ export default function PvPOverview() {
         <div className="bg-card/30 border border-border/30 rounded-lg p-3 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-muted-foreground mb-2">
             <Swords className="h-4 w-4" />
-            <span className="text-xs font-medium uppercase tracking-wider">Win / Loss</span>
+            <span className="text-xs font-medium uppercase tracking-wider">
+              Win / Loss
+            </span>
           </div>
           <div className="flex items-baseline gap-1 font-mono">
-            <span className="text-2xl font-bold text-accent">{stats.totalWins}</span>
+            <span className="text-2xl font-bold text-accent">
+              {stats.totalWins}
+            </span>
             <span className="text-muted-foreground">/</span>
-            <span className="text-xl font-bold text-red-500">{stats.totalLosses}</span>
+            <span className="text-xl font-bold text-red-500">
+              {stats.totalLosses}
+            </span>
           </div>
         </div>
 
@@ -203,7 +242,9 @@ export default function PvPOverview() {
         <div className="bg-card/30 border border-border/30 rounded-lg p-3 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-muted-foreground mb-2">
             <Coins className="h-4 w-4 text-[#d4af37]" />
-            <span className="text-xs font-medium uppercase tracking-wider">Gold Looted</span>
+            <span className="text-xs font-medium uppercase tracking-wider">
+              Gold Looted
+            </span>
           </div>
           <div className="text-2xl font-bold font-mono text-[#d4af37]">
             {stats.totalGold.toLocaleString()}
@@ -214,7 +255,9 @@ export default function PvPOverview() {
         <div className="bg-card/30 border border-border/30 rounded-lg p-3 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-muted-foreground mb-2">
             <TrendingUp className="h-4 w-4" />
-            <span className="text-xs font-medium uppercase tracking-wider">XP Gained</span>
+            <span className="text-xs font-medium uppercase tracking-wider">
+              XP Gained
+            </span>
           </div>
           <div className="text-2xl font-bold font-mono text-foreground">
             {stats.totalXp.toLocaleString()}

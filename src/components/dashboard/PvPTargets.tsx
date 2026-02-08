@@ -245,7 +245,9 @@ export default function PvPTargets({ manualPvpStatus }: PvPTargetsProps) {
                             "text-[9px] uppercase tracking-tighter px-1 py-0.5 rounded-[2px]",
                             rival.lastResult === "WIN"
                               ? "bg-accent/10 text-accent"
-                              : "bg-red-500/10 text-red-400",
+                              : rival.lastResult === "DRAW"
+                                ? "bg-muted/20 text-muted-foreground"
+                                : "bg-red-500/10 text-red-400",
                           )}
                         >
                           {rival.lastResult}

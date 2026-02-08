@@ -57,6 +57,7 @@ const MoonIdSyncOutputSchema = z.object({
         rivalName: z.string(),
         rivalGameId: z.string(),
         rivalRace: z.string().optional(),
+        result: z.enum(["WIN", "LOSS", "DRAW"]).optional(),
         isWinner: z.boolean(),
         goldLooted: z.number(),
         xpEarned: z.number(),

@@ -165,7 +165,7 @@ export function useAutomationEngine(): AutomationEngineState {
           const existing = await getDoc(rivalDocRef);
           const existingData = existing.exists() ? existing.data() : null;
 
-          if (battle.isWinner) {
+          if (battle.result === "WIN" || (!battle.result && battle.isWinner)) {
             setDocumentNonBlocking(
               rivalDocRef,
               {
@@ -175,12 +175,31 @@ export function useAutomationEngine(): AutomationEngineState {
                 rivalRace: battle.rivalRace || existingData?.rivalRace || "",
                 wins: (existingData?.wins || 0) + 1,
                 losses: existingData?.losses || 0,
+                draws: existingData?.draws || 0,
                 totalGoldLooted:
                   (existingData?.totalGoldLooted || 0) + battle.goldLooted,
                 totalXpEarned:
                   (existingData?.totalXpEarned || 0) + battle.xpEarned,
                 lastBattleDate: battle.timestamp,
                 lastResult: "WIN",
+              },
+              { merge: true },
+            );
+          } else if (battle.result === "DRAW") {
+            setDocumentNonBlocking(
+              rivalDocRef,
+              {
+                id: battle.rivalGameId,
+                rivalName: battle.rivalName,
+                rivalGameId: battle.rivalGameId,
+                rivalRace: battle.rivalRace || existingData?.rivalRace || "",
+                wins: existingData?.wins || 0,
+                losses: existingData?.losses || 0,
+                draws: (existingData?.draws || 0) + 1,
+                totalGoldLooted: existingData?.totalGoldLooted || 0,
+                totalXpEarned: existingData?.totalXpEarned || 0,
+                lastBattleDate: battle.timestamp,
+                lastResult: "DRAW",
               },
               { merge: true },
             );
@@ -194,6 +213,7 @@ export function useAutomationEngine(): AutomationEngineState {
                 rivalRace: battle.rivalRace || existingData?.rivalRace || "",
                 wins: existingData?.wins || 0,
                 losses: (existingData?.losses || 0) + 1,
+                draws: existingData?.draws || 0,
                 totalGoldLooted: existingData?.totalGoldLooted || 0,
                 totalXpEarned: existingData?.totalXpEarned || 0,
                 lastBattleDate: battle.timestamp,

@@ -171,4 +171,43 @@ describe("fetchMonstersGameData", () => {
     ).toBeDefined();
     expect(data?.stats.gold).toBe(400);
   });
+
+  it("should detect PvP draw correctly", async () => {
+    const statusHtml = `<span id="goldbalance">100</span><span>Energía vital: (95/100)</span><span>Vampiro</span>`;
+    const huntPageHtml = `ya has usado todo tu tiempo de caza<span>Vampiro</span>`;
+    const searchResultHtml = `<input name="gegnerid" value="99999"><div class="headerRow">Vampiro DrawRival</div><span>Vampiro</span>`;
+    const drawBattleHtml = `<div class="headerRowCWinner">Vencedor/a: Empates</div><table><tr><td class="tdh">Vampiro testuser</td><td>vs.</td><td class="tdh">Vampiro DrawRival</td></tr></table><script>var SecondsCOUNTER = 900;</script><span>Energía vital: (95 / 100)</span><span>Vampiro</span>`;
+
+    mockFetch
+      .mockImplementationOnce(MOCK_LOGIN_FLOW[0])
+      .mockImplementationOnce(MOCK_LOGIN_FLOW[1])
+      .mockImplementationOnce(MOCK_LOGIN_FLOW[2])
+      .mockImplementationOnce(() => createMockResponse(statusHtml))
+      .mockImplementationOnce(() => createMockResponse(huntPageHtml))
+      .mockImplementationOnce(() => createMockResponse(searchResultHtml))
+      .mockImplementationOnce(() => createMockResponse(drawBattleHtml))
+      .mockImplementationOnce(() => createMockResponse(drawBattleHtml));
+
+    const settings = { pvp_attack: true, pvp_target_name: "DrawRival" };
+    const data = await fetchMonstersGameData(
+      "testuser",
+      "password",
+      "s1.monstersgame.es",
+      false,
+      settings,
+    );
+
+    // Log should contain "DRAW" instead of "VICTORY" or "DEFEAT"
+    const battleLog = data?.logs.find((l) => l.type === "BATTLE");
+    expect(battleLog?.message).toContain("DRAW");
+    expect(battleLog?.message).not.toContain("VICTORY");
+    expect(battleLog?.message).not.toContain("DEFEAT");
+
+    // pvpResults should have result === "DRAW"
+    const drawResult = data?.pvpResults.find((r) => r.rivalGameId === "99999");
+    expect(drawResult?.result).toBe("DRAW");
+    expect(drawResult?.isWinner).toBe(false);
+    expect(drawResult?.goldLooted).toBe(0);
+    expect(drawResult?.xpEarned).toBe(0);
+  });
 });
