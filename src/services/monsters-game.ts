@@ -109,6 +109,102 @@ function parseTimeFromText(html: string): number | null {
 }
 
 /**
+ * Authenticates with MoonID and returns session cookies for MonstersGame requests.
+ */
+async function authenticateMoonId(
+  username: string,
+  password: string,
+): Promise<{ getCookieString: () => string; userAgent: string }> {
+  const cookies: Map<string, string> = new Map();
+  const userAgent =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
+  const getCookieString = () =>
+    Array.from(cookies.entries())
+      .map(([k, v]) => `${k}=${v}`)
+      .join("; ");
+  const updateCookies = (setCookieHeaders: string[] | null) => {
+    if (!setCookieHeaders) return;
+    setCookieHeaders.forEach((header) => {
+      const part = header.split(";")[0];
+      const [key, ...valParts] = part.split("=");
+      if (key) cookies.set(key.trim(), valParts.join("="));
+    });
+  };
+
+  const preAuthResponse = await fetch("https://moonid.net/account/login/", {
+    headers: { "User-Agent": userAgent },
+  });
+  updateCookies(preAuthResponse.headers.getSetCookie());
+  const preAuthHtml = await preAuthResponse.text();
+  const csrfMatch = preAuthHtml.match(
+    /name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i,
+  );
+  const csrfToken = csrfMatch ? csrfMatch[1] : "";
+
+  const loginPayload = new URLSearchParams({
+    csrfmiddlewaretoken: csrfToken,
+    username: username,
+    password: password,
+    next: "/api/account/connect/83/",
+  });
+
+  const loginResponse = await fetch("https://moonid.net/account/login/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Cookie: getCookieString(),
+      "User-Agent": userAgent,
+      Referer: "https://moonid.net/account/login/",
+      Origin: "https://moonid.net",
+    },
+    body: loginPayload,
+    redirect: "manual",
+  });
+  updateCookies(loginResponse.headers.getSetCookie());
+
+  let currentUrl = loginResponse.headers.get("Location");
+  while (currentUrl) {
+    if (currentUrl.startsWith("/"))
+      currentUrl = "https://moonid.net" + currentUrl;
+    const res = await fetch(currentUrl, {
+      headers: { Cookie: getCookieString(), "User-Agent": userAgent },
+      redirect: "manual",
+    });
+    updateCookies(res.headers.getSetCookie());
+    currentUrl = res.headers.get("Location");
+  }
+
+  return { getCookieString, userAgent };
+}
+
+/**
+ * Lightweight heartbeat: authenticates and fetches only the cooldown timer from the status page.
+ * Returns pvpCooldown >= 0 on success, or -1 on error.
+ */
+export async function fetchCooldownOnly(
+  username: string,
+  password: string,
+  server: string,
+): Promise<{ pvpCooldown: number }> {
+  try {
+    const { getCookieString, userAgent } = await authenticateMoonId(
+      username,
+      password,
+    );
+    const statusUrl = `https://${server}/index.php?ac=status`;
+    const statusResponse = await fetch(statusUrl, {
+      headers: { Cookie: getCookieString(), "User-Agent": userAgent },
+    });
+    const html = await statusResponse.text();
+    const secondsMatch = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
+    return { pvpCooldown: secondsMatch ? parseInt(secondsMatch[1]) : 0 };
+  } catch {
+    return { pvpCooldown: -1 };
+  }
+}
+
+/**
  * Executes active rituals (automations) and fetches real data from the MonstersGame server.
  */
 export async function fetchMonstersGameData(
@@ -152,69 +248,14 @@ export async function fetchMonstersGameData(
   };
 
   try {
-    const cookies: Map<string, string> = new Map();
-    const userAgent =
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
-
-    const getCookieString = () =>
-      Array.from(cookies.entries())
-        .map(([k, v]) => `${k}=${v}`)
-        .join("; ");
-    const updateCookies = (setCookieHeaders: string[] | null) => {
-      if (!setCookieHeaders) return;
-      setCookieHeaders.forEach((header) => {
-        const part = header.split(";")[0];
-        const [key, ...valParts] = part.split("=");
-        if (key) cookies.set(key.trim(), valParts.join("="));
-      });
-    };
-
     logDebug(
       `[AUTH] Initiating MoonID authentication ritual for [${username}]...`,
     );
 
-    const preAuthResponse = await fetch("https://moonid.net/account/login/", {
-      headers: { "User-Agent": userAgent },
-    });
-    updateCookies(preAuthResponse.headers.getSetCookie());
-    const preAuthHtml = await preAuthResponse.text();
-    const csrfMatch = preAuthHtml.match(
-      /name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i,
+    const { getCookieString, userAgent } = await authenticateMoonId(
+      username,
+      password,
     );
-    const csrfToken = csrfMatch ? csrfMatch[1] : "";
-
-    const loginPayload = new URLSearchParams({
-      csrfmiddlewaretoken: csrfToken,
-      username: username,
-      password: password,
-      next: "/api/account/connect/83/",
-    });
-
-    const loginResponse = await fetch("https://moonid.net/account/login/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Cookie: getCookieString(),
-        "User-Agent": userAgent,
-        Referer: "https://moonid.net/account/login/",
-        Origin: "https://moonid.net",
-      },
-      body: loginPayload,
-      redirect: "manual",
-    });
-    updateCookies(loginResponse.headers.getSetCookie());
-
-    let currentUrl = loginResponse.headers.get("Location");
-    while (currentUrl) {
-      if (currentUrl.startsWith("/"))
-        currentUrl = "https://moonid.net" + currentUrl;
-      const res = await fetch(currentUrl, {
-        headers: { Cookie: getCookieString(), "User-Agent": userAgent },
-        redirect: "manual",
-      });
-      updateCookies(res.headers.getSetCookie());
-      currentUrl = res.headers.get("Location");
-    }
 
     // --- STEP 1: INITIAL SYNC ---
     const statusUrl = `https://${server}/index.php?ac=status`;
