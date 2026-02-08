@@ -220,7 +220,7 @@ export async function fetchMonstersGameData(
   const logs: MonstersGameStats["logs"] = [];
   const pvpResults: MonstersGameStats["pvpResults"] = [];
   let pvpCooldown = 0;
-  let cooldownReason = '';
+  let cooldownReason = "";
   let manualPvpStatus: MonstersGameStats["manualPvpStatus"] = undefined;
 
   const logDebug = (msg: string) => {
@@ -393,6 +393,7 @@ export async function fetchMonstersGameData(
             repeatHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
               jagdzeitSeconds.toString(),
           );
+        cooldownReason = "Manhunt in progress";
         logs.push({
           type: "MANHUNT",
           message: `Manhunt Ritual: Repeating hunt for ${repeatMinutes}m. Blood shall flow.`,
@@ -449,17 +450,17 @@ export async function fetchMonstersGameData(
 
       if (isWorking) {
         busyMsg = `Shadow Vigil: Character is currently working at the graveyard. Shift ends in ${timeLeft}.`;
-        cooldownReason = 'Graveyard work shift in progress';
+        cooldownReason = "Graveyard work shift in progress";
       } else if (isInMission) {
         busyMsg = `Shadow Vigil: Character is currently on a mission in the Ancestral Grotto. Ends in ${timeLeft}.`;
-        cooldownReason = 'Ancestral Grotto mission in progress';
+        cooldownReason = "Ancestral Grotto mission in progress";
       } else if (isManhunting) {
         busyMsg = `Shadow Vigil: Character is currently hunting humans. Hunt ends in ${timeLeft}.`;
-        cooldownReason = 'Manhunt in progress';
+        cooldownReason = "Manhunt in progress";
       } else {
         // Cooldown exists but no specific busy state - likely PvP protection or action recovery
         busyMsg = `Shadow Vigil: Awaiting action cooldown (PvP protection or activity recovery). Available in ${timeLeft}.`;
-        cooldownReason = 'PvP protection or activity recovery';
+        cooldownReason = "PvP protection or activity recovery";
       }
 
       logs.push({
@@ -578,7 +579,7 @@ export async function fetchMonstersGameData(
             workHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
               (hoursToWork * 3600).toString(),
           );
-        cooldownReason = 'Graveyard work shift in progress';
+        cooldownReason = "Graveyard work shift in progress";
         logs.push({
           type: "INFO",
           message: `Shadow Ritual: Graveyard shift started for ${hoursToWork}h. Earning gold while resting.`,
@@ -703,6 +704,7 @@ export async function fetchMonstersGameData(
                       /var\s+SecondsCOUNTER\s*=\s*(\d+);/i,
                     )?.[1] || "900",
                   );
+                cooldownReason = "PvP battle recovery";
 
                 logs.push({
                   type: "BATTLE",
@@ -828,7 +830,7 @@ export async function fetchMonstersGameData(
                         /var\s+SecondsCOUNTER\s*=\s*(\d+);/i,
                       )?.[1] || "900",
                     );
-                  cooldownReason = 'PvP battle recovery';
+                  cooldownReason = "PvP battle recovery";
                   logs.push({
                     type: "BATTLE",
                     message: `PvP Ritual: ${isWinner ? "VICTORY" : "DEFEAT"} vs ${rivalName}. Loot: ${lootVal.toFixed(2)} gold, ${expVal} XP.`,
@@ -873,7 +875,7 @@ export async function fetchMonstersGameData(
                 mHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
                   seconds.toString(),
               );
-            cooldownReason = 'Manhunt in progress';
+            cooldownReason = "Manhunt in progress";
             logs.push({
               type: "MANHUNT",
               message: `Manhunt Ritual: Tracking humans for ${minutes}m. Blood shall flow.`,

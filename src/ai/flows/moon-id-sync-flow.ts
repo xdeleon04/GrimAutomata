@@ -7,7 +7,10 @@
 
 import { ai } from "@/ai/genkit";
 import { z } from "genkit";
-import { fetchMonstersGameData, fetchCooldownOnly } from "@/services/monsters-game";
+import {
+  fetchMonstersGameData,
+  fetchCooldownOnly,
+} from "@/services/monsters-game";
 import { decrypt } from "@/services/crypto";
 
 const MoonIdSyncInputSchema = z.object({
@@ -104,9 +107,7 @@ export async function checkCooldown(input: {
   password?: string;
   server: string;
 }): Promise<{ pvpCooldown: number }> {
-  const decryptedPassword = input.password
-    ? await decrypt(input.password)
-    : "";
+  const decryptedPassword = input.password ? await decrypt(input.password) : "";
   return fetchCooldownOnly(input.username, decryptedPassword, input.server);
 }
 

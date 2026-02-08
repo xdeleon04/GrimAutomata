@@ -81,8 +81,12 @@ export function useAutomationEngine(): AutomationEngineState {
         ? pvpRivals
             .filter((r: any) => r.lastResult !== "LOSS")
             .sort((a: any, b: any) => {
-              const dateA = a.lastBattleDate ? new Date(a.lastBattleDate).getTime() : 0;
-              const dateB = b.lastBattleDate ? new Date(b.lastBattleDate).getTime() : 0;
+              const dateA = a.lastBattleDate
+                ? new Date(a.lastBattleDate).getTime()
+                : 0;
+              const dateB = b.lastBattleDate
+                ? new Date(b.lastBattleDate).getTime()
+                : 0;
               return dateA - dateB;
             })
             .map((r: any) => ({
@@ -231,8 +235,7 @@ export function useAutomationEngine(): AutomationEngineState {
           checkCooldown({
             username: credentials.moonIdUsername,
             password: credentials.encryptedMoonIdPassword,
-            server:
-              credentials.description || "es1.monstersgame.moonid.net",
+            server: credentials.description || "es1.monstersgame.moonid.net",
           })
             .then((result) => {
               if (result.pvpCooldown >= 0) {

@@ -63,7 +63,9 @@ export function StatusHeader() {
               <span>
                 Cooldown: {formatTime(cooldown)}
                 {cooldownReason && (
-                  <span className="text-muted-foreground ml-1">({cooldownReason})</span>
+                  <span className="text-muted-foreground ml-1">
+                    ({cooldownReason})
+                  </span>
                 )}
               </span>
             </div>
