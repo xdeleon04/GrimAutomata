@@ -102,7 +102,7 @@ describe("fetchMonstersGameData", () => {
     const statusHtml = `<span id="goldbalance">100</span><span>Energía vital: (95/100)</span><span>Vampiro</span>`;
     const huntPageHtml = `ya has usado todo tu tiempo de caza<span>Vampiro</span>`;
     const searchResultHtml = `<input name="gegnerid" value="12345"><div class="headerRow">Vampiro RivalPlayer</div><span>Vampiro</span>`;
-    const attackResultHtml = `<div class="headerRowCWinner">Vencedor/a: testuser</div>testuser Ha conseguido 5,00 <img src="" alt="Oro"> gold. 3 punto(s) de experiencia<script>var SecondsCOUNTER = 900;</script><span>Energía vital: (95 / 100)</span><span>Vampiro</span>`;
+    const attackResultHtml = `<div class="headerRowCWinner"><b>Vencedor/a:</b> testuser</div><table><tr><td class="tdh">Vampiro testuser</td><td>vs.</td><td class="tdh">Hombre Lobo RivalPlayer</td></tr></table>testuser Ha conseguido 5,00 <img src="" alt="Oro"> gold. 3 punto(s) de experiencia<script>var SecondsCOUNTER = 900;</script><span>Energía vital: (95 / 100)</span><span>Vampiro</span>`;
 
     mockFetch
       .mockImplementationOnce(MOCK_LOGIN_FLOW[0])

@@ -435,10 +435,26 @@ export function parseBattleResult(html: string): {
   goldLooted: number;
   xpEarned: number;
 } {
+  const winnerMatch = html.match(MG_REGEX.WINNER_BANNER);
+  const winnerRaw = winnerMatch ? winnerMatch[1].trim() : "";
+  const winnerWithoutTags = winnerRaw.includes(">")
+    ? (winnerRaw.split(">").pop() || "").trim()
+    : winnerRaw;
+  const winnerName = winnerWithoutTags.includes(":")
+    ? winnerWithoutTags.split(":").slice(1).join(":").trim()
+    : winnerWithoutTags;
+
+  const vsMatch = html.match(MG_REGEX.FIGHT_VS_ROW);
+  let ourName = "";
+  if (vsMatch) {
+    ourName = vsMatch[2].trim();
+  }
+
+  const isWinner =
+    winnerName !== "" && ourName !== "" && winnerName === ourName;
+
   return {
-    isWinner:
-      html.includes("headerRowCWinner") ||
-      matchesAnyPattern(html, MG_TEXT.WINNER),
+    isWinner,
     goldLooted: parseEuropeanNumber(html.match(MG_REGEX.LOOT_GOLD)?.[1] || "0"),
     xpEarned: parseEuropeanNumber(html.match(MG_REGEX.LOOT_XP)?.[1] || "0"),
   };
