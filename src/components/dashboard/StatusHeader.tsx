@@ -51,18 +51,15 @@ export function StatusHeader() {
 
       <div className="flex items-center gap-3 w-full sm:w-auto">
         <div className="hidden lg:flex items-center gap-6 mr-6 text-sm">
-          {isSyncing && (
-            <div className="flex items-center gap-2 text-accent">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Invoking Ritual...</span>
-            </div>
-          )}
-          {cooldown > 0 && (
+          {(isSyncing || cooldown > 0) && (
             <div className="flex items-center gap-2 text-orange-400">
-              <Activity className="w-4 h-4 animate-pulse" />
+              {isSyncing && <Loader2 className="w-4 h-4 animate-spin" />}
+              {cooldown > 0 && <Activity className="w-4 h-4 animate-pulse" />}
               <span>
-                Cooldown: {formatTime(cooldown)}
-                {cooldownReason && (
+                {cooldown > 0
+                  ? `Cooldown: ${formatTime(cooldown)}`
+                  : "Invoking Ritual..."}
+                {cooldownReason && cooldown > 0 && (
                   <span className="text-muted-foreground ml-1">
                     ({cooldownReason})
                   </span>

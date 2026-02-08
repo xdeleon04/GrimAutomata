@@ -653,9 +653,8 @@ export async function fetchMonstersGameData(
                 const rivalRace = rivalRaceMatch
                   ? rivalRaceMatch[1]
                   : undefined;
-                const rivalName = rivalNameMatch
-                  ? rivalNameMatch[1].trim()
-                  : "Unknown Rival";
+                const rivalName =
+                  rivalNameMatch?.[1]?.trim() || "Unknown Rival";
 
                 if (gegnerIdMatch) {
                   const battleRes = await fetch(huntPageUrl, {
