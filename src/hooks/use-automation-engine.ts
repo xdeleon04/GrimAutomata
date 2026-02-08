@@ -250,6 +250,11 @@ export function useAutomationEngine(): AutomationEngineState {
               if (result.pvpCooldown > 0) {
                 cooldownRef.current = result.pvpCooldown;
                 setCooldown(result.pvpCooldown);
+              } else if (cooldownRef.current > 0) {
+                // Server cooldown is done but local is still counting - trigger sync
+                cooldownRef.current = 0;
+                setCooldown(0);
+                initialSyncRequiredRef.current = true;
               }
             })
             .catch(() => {})
