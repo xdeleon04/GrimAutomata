@@ -442,7 +442,7 @@ export async function fetchMonstersGameData(
 
     if (pvpCooldown > 0 || isWorking || isInMission || isManhunting) {
       const timeLeft = formatDuration(pvpCooldown);
-      let busyMsg = `Shadow Vigil: Character is currently resting. Cooldown: ${timeLeft}.`;
+      let busyMsg = "";
 
       if (isWorking) {
         busyMsg = `Shadow Vigil: Character is currently working at the graveyard. Shift ends in ${timeLeft}.`;
@@ -450,6 +450,9 @@ export async function fetchMonstersGameData(
         busyMsg = `Shadow Vigil: Character is currently on a mission in the Ancestral Grotto. Ends in ${timeLeft}.`;
       } else if (isManhunting) {
         busyMsg = `Shadow Vigil: Character is currently hunting humans. Hunt ends in ${timeLeft}.`;
+      } else {
+        // Cooldown exists but no specific busy state - likely PvP protection or action recovery
+        busyMsg = `Shadow Vigil: Awaiting action cooldown (PvP protection or activity recovery). Available in ${timeLeft}.`;
       }
 
       logs.push({
