@@ -253,19 +253,150 @@ export async function fetchMonstersGameData(
     );
     const busyText = busyMsgBox ? busyMsgBox[1].toLowerCase() : "";
 
-    const isWorking =
+    let isWorking =
       busyText.includes("trabajando") ||
       busyText.includes("cementerio") ||
       busyText.includes("friedhof");
-    const isInMission =
+    let isInMission =
       busyText.includes("misión") ||
       busyText.includes("mision") ||
       busyText.includes("grotto") ||
       busyText.includes("ahnenstaette");
-    const isManhunting =
+    let isManhunting =
       busyText.includes("raid") ||
       busyText.includes("caza") ||
       busyText.includes("raubzug");
+
+    // --- MANHUNT COMPLETION: collect results when timer has expired ---
+    if (isManhunting && pvpCooldown <= 0) {
+      const huntPageUrl = `https://${server}/index.php?ac=raubzug`;
+      const huntCollectRes = await fetch(huntPageUrl, {
+        headers: { Cookie: getCookieString(), "User-Agent": userAgent },
+      });
+      const huntCollectHtml = await huntCollectRes.text();
+
+      // Parse manhunt spoils
+      if (
+        huntCollectHtml.includes("Resultado de la caza") ||
+        huntCollectHtml.includes("Result of the hunt")
+      ) {
+        const blood =
+          huntCollectHtml.match(/(\d+)\s+litros\s+de\s+sangre/i)?.[1] ||
+          "0";
+        const goldVal = parseMGNumber(
+          huntCollectHtml.match(/([\d,.]+)\s+<img[^>]+alt=["']Oro["']/i)
+            ?.[1] || "0",
+        );
+        const expVal = parseMGNumber(
+          huntCollectHtml.match(
+            /([\d,.]+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia|experience)/i,
+          )?.[1] || "0",
+        );
+
+        if (blood !== "0" || goldVal > 0 || expVal > 0) {
+          logs.push({
+            type: "MANHUNT",
+            message: `Manhunt Harvest: Collected ${blood} liters of blood, ${goldVal.toFixed(2)} gold, and ${expVal} XP.`,
+            timestamp: new Date().toISOString(),
+          });
+        } else if (
+          huntCollectHtml.includes("nada que encontrar") ||
+          huntCollectHtml.includes("nothing to be found")
+        ) {
+          logs.push({
+            type: "MANHUNT",
+            message: "Manhunt result: The shadows yielded nothing this time.",
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+
+      const huntLimitReached =
+        huntCollectHtml.includes("ya has usado todo tu tiempo de caza") ||
+        huntCollectHtml.includes("used all of today's hunting time");
+      const hasRepeatForm = /name=["']sac["']\s+value=["']vampir["']/i.test(
+        huntCollectHtml,
+      );
+
+      if (settings.auto_manhunt && hasRepeatForm && !huntLimitReached) {
+        // Extract jagdzeit from the repeat form, or use configured duration
+        const jagdzeitMatch = huntCollectHtml.match(
+          /name=["']jagdzeit["']\s+value=["'](\d+)["']/i,
+        );
+        const jagdzeitSeconds = jagdzeitMatch
+          ? parseInt(jagdzeitMatch[1])
+          : parseInt(settings.manhunt_duration || "10") * 60;
+        const repeatMinutes = Math.round(jagdzeitSeconds / 60);
+
+        const repeatPayload = new URLSearchParams({
+          ac: "raubzug",
+          sac: "vampir",
+          jagdzeit: jagdzeitSeconds.toString(),
+        });
+        const repeatRes = await fetch(huntPageUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Cookie: getCookieString(),
+            "User-Agent": userAgent,
+          },
+          body: repeatPayload,
+        });
+        const repeatHtml = await repeatRes.text();
+        const textCooldown = parseTimeFromText(repeatHtml);
+        pvpCooldown =
+          textCooldown ??
+          parseInt(
+            repeatHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
+              jagdzeitSeconds.toString(),
+          );
+        logs.push({
+          type: "MANHUNT",
+          message: `Manhunt Ritual: Repeating hunt for ${repeatMinutes}m. Blood shall flow.`,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        // Submit the back form to return to hunt page and clear busy state
+        await fetch(huntPageUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Cookie: getCookieString(),
+            "User-Agent": userAgent,
+          },
+          body: new URLSearchParams({ ac: "raubzug" }),
+        });
+      }
+
+      // Re-fetch status to clear stale busy state
+      statusResponse = await fetch(statusUrl, {
+        headers: { Cookie: getCookieString(), "User-Agent": userAgent },
+      });
+      html = await statusResponse.text();
+      const refreshedCooldown = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
+      if (refreshedCooldown) pvpCooldown = parseInt(refreshedCooldown[1]);
+
+      // Re-evaluate busy flags from refreshed page
+      const refreshedBusyBox = html.match(
+        /class=["']pageContentC["'][^>]*>(.*?)<\/div>/is,
+      );
+      const refreshedBusy = refreshedBusyBox
+        ? refreshedBusyBox[1].toLowerCase()
+        : "";
+      isWorking =
+        refreshedBusy.includes("trabajando") ||
+        refreshedBusy.includes("cementerio") ||
+        refreshedBusy.includes("friedhof");
+      isInMission =
+        refreshedBusy.includes("misión") ||
+        refreshedBusy.includes("mision") ||
+        refreshedBusy.includes("grotto") ||
+        refreshedBusy.includes("ahnenstaette");
+      isManhunting =
+        refreshedBusy.includes("raid") ||
+        refreshedBusy.includes("caza") ||
+        refreshedBusy.includes("raubzug");
+    }
 
     if (pvpCooldown > 0 || isWorking || isInMission || isManhunting) {
       const timeLeft = formatDuration(pvpCooldown);
