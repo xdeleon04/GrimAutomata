@@ -300,7 +300,9 @@ export async function fetchMonstersGameData(
     let isWorking =
       busyText.includes("trabajando") ||
       busyText.includes("cementerio") ||
-      busyText.includes("friedhof");
+      busyText.includes("friedhof") ||
+      busyText.includes("graveyard") ||
+      busyText.includes("working");
     let isInMission =
       busyText.includes("misión") ||
       busyText.includes("mision") ||
@@ -432,7 +434,9 @@ export async function fetchMonstersGameData(
       isWorking =
         refreshedBusy.includes("trabajando") ||
         refreshedBusy.includes("cementerio") ||
-        refreshedBusy.includes("friedhof");
+        refreshedBusy.includes("friedhof") ||
+        refreshedBusy.includes("graveyard") ||
+        refreshedBusy.includes("working");
       isInMission =
         refreshedBusy.includes("misión") ||
         refreshedBusy.includes("mision") ||
