@@ -165,6 +165,11 @@ function StatCard({
             )}
           </div>
         )}
+        {progress === undefined && progressLabel && (
+          <div className="text-[9px] text-muted-foreground text-right">
+            {progressLabel}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
