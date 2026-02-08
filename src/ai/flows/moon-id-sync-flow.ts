@@ -72,6 +72,7 @@ const MoonIdSyncOutputSchema = z.object({
   stats: z.object({
     level: z.number(),
     gold: z.number(),
+    blood: z.number(),
     stamina: z.number(),
     maxStamina: z.number(),
     experience: z.number(),
