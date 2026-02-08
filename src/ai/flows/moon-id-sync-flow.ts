@@ -7,7 +7,7 @@
 
 import { ai } from "@/ai/genkit";
 import { z } from "genkit";
-import { fetchMonstersGameData } from "@/services/monsters-game";
+import { fetchMonstersGameData, fetchCooldownOnly } from "@/services/monsters-game";
 import { decrypt } from "@/services/crypto";
 
 const MoonIdSyncInputSchema = z.object({
@@ -92,6 +92,20 @@ export async function syncMoonId(
   input: MoonIdSyncInput,
 ): Promise<MoonIdSyncOutput> {
   return moonIdSyncFlow(input);
+}
+
+/**
+ * Lightweight heartbeat: fetches only the cooldown timer from the game server.
+ */
+export async function checkCooldown(input: {
+  username: string;
+  password?: string;
+  server: string;
+}): Promise<{ pvpCooldown: number }> {
+  const decryptedPassword = input.password
+    ? await decrypt(input.password)
+    : "";
+  return fetchCooldownOnly(input.username, decryptedPassword, input.server);
 }
 
 const moonIdSyncFlow = ai.defineFlow(

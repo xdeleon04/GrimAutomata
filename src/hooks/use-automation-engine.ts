@@ -8,7 +8,7 @@ import {
   setDocumentNonBlocking,
 } from "@/firebase";
 import { doc, collection, serverTimestamp, getDoc } from "firebase/firestore";
-import { syncMoonId } from "@/ai/flows/moon-id-sync-flow";
+import { syncMoonId, checkCooldown } from "@/ai/flows/moon-id-sync-flow";
 import {
   useCredentials,
   useAutomationSettings,
@@ -41,6 +41,8 @@ export function useAutomationEngine(): AutomationEngineState {
   const isSyncingRef = useRef<boolean>(false);
   const cooldownRef = useRef<number>(0);
   const initialSyncRequiredRef = useRef<boolean>(false);
+  const heartbeatTickRef = useRef<number>(0);
+  const isHeartbeatRef = useRef<boolean>(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!db || !user) return null;
@@ -211,6 +213,35 @@ export function useAutomationEngine(): AutomationEngineState {
           return currentCooldown;
         });
 
+        // Heartbeat: sync cooldown with game server every 60 seconds
+        heartbeatTickRef.current += 1;
+        if (
+          heartbeatTickRef.current >= 60 &&
+          cooldownRef.current > 0 &&
+          !isSyncingRef.current &&
+          !isHeartbeatRef.current &&
+          credentials
+        ) {
+          heartbeatTickRef.current = 0;
+          isHeartbeatRef.current = true;
+          checkCooldown({
+            username: credentials.moonIdUsername,
+            password: credentials.encryptedMoonIdPassword,
+            server:
+              credentials.description || "es1.monstersgame.moonid.net",
+          })
+            .then((result) => {
+              if (result.pvpCooldown >= 0) {
+                cooldownRef.current = result.pvpCooldown;
+                setCooldown(result.pvpCooldown);
+              }
+            })
+            .catch(() => {})
+            .finally(() => {
+              isHeartbeatRef.current = false;
+            });
+        }
+
         const now = Date.now();
         const secondsSinceLastSync =
           lastSyncRef.current === 0
@@ -233,6 +264,8 @@ export function useAutomationEngine(): AutomationEngineState {
       lastSyncRef.current = 0;
       initialSyncRequiredRef.current = false;
       isSyncingRef.current = false;
+      heartbeatTickRef.current = 0;
+      isHeartbeatRef.current = false;
     }
     return () => clearInterval(interval);
   }, [isRunning, triggerSync]);
