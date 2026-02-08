@@ -19,6 +19,18 @@ export const MG_ROUTES = {
 } as const;
 
 // ============================================================================
+// ACTION CODES (for form submissions)
+// ============================================================================
+export const MG_ACTIONS = {
+  RAID: "raubzug",
+  GRAVEYARD: "friedhof",
+  STATUS: "status",
+  TRAINING: "training",
+  CITY: "stadt",
+  ANCESTRAL: "ahnenstaette",
+} as const;
+
+// ============================================================================
 // FORM PARAMETERS
 // ============================================================================
 export const MG_PARAMS = {
@@ -143,8 +155,7 @@ export const MG_REGEX = {
   // Statbar values
   GOLD_BALANCE: /id=["']goldbalance["'][^>]*>([\d,.]+)</i,
   BLOOD_BALANCE: /id=["']bloodbalance["'][^>]*>([\d,.]+)</i,
-  STAMINA:
-    /Energ(?:i|í)a\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/is,
+  STAMINA: /Energ(?:i|í)a\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/is,
   STAMINA_SIMPLE: /Energ(?:i|í)a\s+vital:\s*([\d,.]+)/i,
   EXPERIENCE: /Experiencia.*?([\d,.]+)\s*[|/]\s*([\d,.]+)/is,
   SKILL_AVERAGE: /statbarSkillAverage["'][^>]*>.*?:\s*([\d,.]+)/i,

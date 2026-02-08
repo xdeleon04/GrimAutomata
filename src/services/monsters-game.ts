@@ -5,6 +5,7 @@
  */
 
 import {
+  MG_ACTIONS,
   MG_ROUTES,
   MG_PARAMS,
   MG_TEXT,
@@ -282,7 +283,7 @@ export async function fetchMonstersGameData(
         const repeatMinutes = Math.round(jagdzeitSeconds / 60);
 
         const repeatPayload = new URLSearchParams({
-          ac: "raubzug",
+          ac: MG_ACTIONS.RAID,
           sac: MG_PARAMS.MANHUNT_SAC,
           [MG_PARAMS.MANHUNT_TIME]: jagdzeitSeconds.toString(),
         });
@@ -314,7 +315,7 @@ export async function fetchMonstersGameData(
             Cookie: getCookieString(),
             "User-Agent": userAgent,
           },
-          body: new URLSearchParams({ ac: "raubzug" }),
+          body: new URLSearchParams({ ac: MG_ACTIONS.RAID }),
         });
       }
 
@@ -385,7 +386,7 @@ export async function fetchMonstersGameData(
         } else if (currentGold >= targetPotion.cost) {
           // Precise POST data for ES1 merchant
           const traderParams = new URLSearchParams();
-          traderParams.append("ac", "stadt");
+          traderParams.append("ac", MG_ACTIONS.CITY);
           traderParams.append("prod_group", "4");
           traderParams.append("item_id", targetPotion.id.toString());
           traderParams.append("num_items", "0");
@@ -441,7 +442,7 @@ export async function fetchMonstersGameData(
           Math.max(1, Math.ceil(pointsNeeded / 10)),
         );
         const workPayload = new URLSearchParams({
-          ac: "friedhof",
+          ac: MG_ACTIONS.GRAVEYARD,
           sac: MG_PARAMS.WORK_SAC,
           [MG_PARAMS.WORK_TIME]: hoursToWork.toString(),
         });
@@ -529,7 +530,7 @@ export async function fetchMonstersGameData(
                     "User-Agent": userAgent,
                   },
                   body: new URLSearchParams({
-                    ac: "raubzug",
+                    ac: MG_ACTIONS.RAID,
                     sac: MG_PARAMS.PVP_ATTACK_SAC,
                     gegnerid: rival.rivalGameId,
                   }),
@@ -603,7 +604,7 @@ export async function fetchMonstersGameData(
               }
             } else if (settings.pvp_attack) {
               const pvpSearchPayload = new URLSearchParams({
-                ac: "raubzug",
+                ac: MG_ACTIONS.RAID,
                 sac: MG_PARAMS.PVP_SEARCH_SAC,
                 [MG_PARAMS.SEARCH_NAME]: settings.pvp_target_name || "",
                 [MG_PARAMS.SEARCH_OPT]:
@@ -665,7 +666,7 @@ export async function fetchMonstersGameData(
                       "User-Agent": userAgent,
                     },
                     body: new URLSearchParams({
-                      ac: "raubzug",
+                      ac: MG_ACTIONS.RAID,
                       sac: MG_PARAMS.PVP_ATTACK_SAC,
                       gegnerid: gegnerIdMatch[1],
                     }),
@@ -700,7 +701,7 @@ export async function fetchMonstersGameData(
             const minutes = parseInt(settings.manhunt_duration || "10");
             const seconds = minutes * 60;
             const mPayload = new URLSearchParams({
-              ac: "raubzug",
+              ac: MG_ACTIONS.RAID,
               sac: MG_PARAMS.MANHUNT_SAC,
               [MG_PARAMS.MANHUNT_TIME]: seconds.toString(),
               x: "194",
