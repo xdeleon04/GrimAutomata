@@ -647,6 +647,14 @@ export async function fetchMonstersGameData(
             lowerHuntHtml.includes("menschenjagd")
           ) {
             cooldownReason = "Manhunt in progress";
+          } else if (
+            lowerHuntHtml.includes("trabajando") ||
+            lowerHuntHtml.includes("cementerio") ||
+            lowerHuntHtml.includes("friedhof") ||
+            lowerHuntHtml.includes("graveyard") ||
+            lowerHuntHtml.includes("working")
+          ) {
+            cooldownReason = "Graveyard work shift in progress";
           } else {
             cooldownReason = "Combat cooldown active";
           }
@@ -1079,11 +1087,6 @@ export async function fetchMonstersGameData(
       }
     } catch {
       logDebug("[MESSAGES] Failed to fetch PvP message history");
-    }
-
-    // Fallback: ensure cooldownReason is set if there's an active cooldown
-    if (pvpCooldown > 0 && !cooldownReason) {
-      cooldownReason = "Action cooldown active";
     }
 
     return {
