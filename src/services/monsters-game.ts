@@ -628,6 +628,26 @@ export async function fetchMonstersGameData(
           huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || "0",
         );
 
+        // Detect specific cooldown reason from hunt page content
+        if (pvpCooldown > 0 && !cooldownReason) {
+          const lowerHuntHtml = huntHtml.toLowerCase();
+          if (
+            lowerHuntHtml.includes("próximo ataque") ||
+            lowerHuntHtml.includes("next attack") ||
+            lowerHuntHtml.includes("nächster angriff")
+          ) {
+            cooldownReason = "PvP attack cooldown";
+          } else if (
+            lowerHuntHtml.includes("caza de humanos") ||
+            lowerHuntHtml.includes("human hunt") ||
+            lowerHuntHtml.includes("menschenjagd")
+          ) {
+            cooldownReason = "Manhunt in progress";
+          } else {
+            cooldownReason = "Combat cooldown active";
+          }
+        }
+
         if (pvpCooldown <= 0) {
           const humanLimitReached =
             huntHtml.includes("used all of today's hunting time") ||
