@@ -40,8 +40,7 @@ function parseMessageListPage(html: string): MessageListEntry[] {
   const entries: MessageListEntry[] = [];
 
   // Match each table row that contains a fight report link
-  const rowRegex =
-    /<tr>\s*<td>\s*del dia\s+(.+?)<\/td>\s*<td><a\s+href="index\.php\?ac=showuser&(?:amp;)?showuserid=(\d+)">([^<]+)<\/a><\/td>\s*<td>([^<]*)<\/td>\s*<td>([\d,.]+)\s*<img[^>]+alt=["']Oro["'][^>]*><\/td>\s*<td><a\s+href="index\.php\?ac=fightreport&(?:amp;)?fightid=(\d+)&(?:amp;)?sac=angriff">/gi;
+  const rowRegex = MG_REGEX.MESSAGE_LIST_ROW;
 
   let match: RegExpExecArray | null;
   while ((match = rowRegex.exec(html)) !== null) {
@@ -141,9 +140,7 @@ export async function scrapePvpHistory(
 
       // Parse both players from the "tdh" vs row
       // Left side = our character, Right side = rival
-      const vsMatch = reportHtml.match(
-        /class="tdh"[^>]*>(Vampiro|Vampira|Hombre Lobo)\s+([^<]+)<\/td>\s*<td[^>]*>vs\.\s*<\/td>\s*<td[^>]*class="tdh"[^>]*>(Vampiro|Vampira|Hombre Lobo)\s+([^<]+)<\/td>/i,
-      );
+      const vsMatch = reportHtml.match(MG_REGEX.FIGHT_VS_ROW);
 
       let ourName = "";
       let rivalName = entry.rivalName;
@@ -185,9 +182,7 @@ export async function scrapePvpHistory(
       }
 
       // Parse timestamp from report header
-      const timestampMatch = reportHtml.match(
-        /(?:del dia|del día)\s+(\d{2}\.\d{2}\.\d{4})\s+a las\s+(\d{2}:\d{2}:\d{2})/i,
-      );
+      const timestampMatch = reportHtml.match(MG_REGEX.FIGHT_TIMESTAMP);
       let timestamp = new Date().toISOString();
       if (timestampMatch) {
         const [day, month, year] = timestampMatch[1].split(".");

@@ -144,6 +144,9 @@ export const MG_TEXT = {
 // REGEX PATTERNS
 // ============================================================================
 export const MG_REGEX = {
+  // MoonID auth
+  CSRF_TOKEN: /name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i,
+
   // Timer extraction from JavaScript
   SECONDS_COUNTER: /var\s+SecondsCOUNTER\s*=\s*(\d+);/i,
 
@@ -160,6 +163,7 @@ export const MG_REGEX = {
   STAMINA_SIMPLE: /Energ(?:i|í)a\s+vital:\s*([\d,.]+)/i,
   EXPERIENCE: /Experiencia.*?([\d,.]+)\s*[|/]\s*([\d,.]+)/is,
   SKILL_AVERAGE: /statbarSkillAverage["'][^>]*>.*?:\s*([\d,.]+)/i,
+  GOLD_TEXT: /Tu oro:.*?([\d,.]+)/is,
 
   // Attribute extraction
   STRENGTH: /Fuerza:.*?\((\d+)\)/is,
@@ -177,8 +181,15 @@ export const MG_REGEX = {
   WINNER_BANNER: /<div class="headerRowCWinner">.*?([^<]+)<\/div>/i,
   FIGHT_REPORT_LINK: /ac=fightreport&(?:amp;)?fightid=(\d+)/gi,
   RIVAL_LINK: /ac=showuser&(?:amp;)?showuserid=(\d+)[^>]*>([^<]+)<\/a>/i,
+  PROFILE_LINK_NAME: /sac=info&(?:amp;)?id=\d+[^>]*>([^<]+)<\/a>/i,
   PROFILE_NAME:
     /<div class="headerRow">(?:Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)\s+([^<]+)<\/div>/i,
+  FIGHT_VS_ROW:
+    /class="tdh"[^>]*>(Vampiro|Vampira|Hombre Lobo)\s+([^<]+)<\/td>\s*<td[^>]*>vs\.\s*<\/td>\s*<td[^>]*class="tdh"[^>]*>(Vampiro|Vampira|Hombre Lobo)\s+([^<]+)<\/td>/i,
+  FIGHT_TIMESTAMP:
+    /(?:del dia|del día)\s+(\d{2}\.\d{2}\.\d{4})\s+a las\s+(\d{2}:\d{2}:\d{2})/i,
+  MESSAGE_LIST_ROW:
+    /<tr>\s*<td>\s*del dia\s+(.+?)<\/td>\s*<td><a\s+href="index\.php\?ac=showuser&(?:amp;)?showuserid=(\d+)">([^<]+)<\/a><\/td>\s*<td>([^<]*)<\/td>\s*<td>([\d,.]+)\s*<img[^>]+alt=["']Oro["'][^>]*><\/td>\s*<td><a\s+href="index\.php\?ac=fightreport&(?:amp;)?fightid=(\d+)&(?:amp;)?sac=angriff">/gi,
   OPPONENT_ID: /name=["']gegnerid["']\s+value=["'](\d+)["']/i,
 
   // Loot parsing

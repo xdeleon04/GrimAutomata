@@ -109,9 +109,7 @@ export async function authenticateMoonId(
   });
   updateCookies(preAuthResponse.headers.getSetCookie());
   const preAuthHtml = await preAuthResponse.text();
-  const csrfMatch = preAuthHtml.match(
-    /name=['"]csrfmiddlewaretoken['"]\s+value=['"]([^'"]+)['"]/i,
-  );
+  const csrfMatch = preAuthHtml.match(MG_REGEX.CSRF_TOKEN);
   const csrfToken = csrfMatch ? csrfMatch[1] : "";
 
   const loginPayload = new URLSearchParams({
@@ -799,7 +797,7 @@ export async function fetchMonstersGameData(
           });
           const tHtml = await tRes.text();
           currentGold = parseEuropeanNumber(
-            tHtml.match(/Tu oro:.*?([\d,.]+)/is)?.[1] || currentGold.toString(),
+            tHtml.match(MG_REGEX.GOLD_TEXT)?.[1] || currentGold.toString(),
           );
 
           const availableTrainings = [];
@@ -886,7 +884,7 @@ export async function fetchMonstersGameData(
           const reportHtml = await reportRes.text();
 
           const reportRivalName = reportHtml
-            .match(/sac=info&(?:amp;)?id=\d+[^>]*>([^<]+)<\/a>/i)?.[1]
+            .match(MG_REGEX.PROFILE_LINK_NAME)?.[1]
             ?.trim();
           const reportRivalId = reportHtml.match(
             /sac=info&(?:amp;)?id=(\d+)/i,
