@@ -636,9 +636,10 @@ export async function fetchMonstersGameData(
         if (pvpCooldown > 0 && !cooldownReason) {
           const lowerHuntHtml = huntHtml.toLowerCase();
           if (
-            lowerHuntHtml.includes("próximo ataque") ||
-            lowerHuntHtml.includes("next attack") ||
-            lowerHuntHtml.includes("nächster angriff")
+            lowerHuntHtml.includes("you can only fight every") ||
+            lowerHuntHtml.includes("solo puedes luchar cada") ||
+            lowerHuntHtml.includes("caza de adversarios") ||
+            lowerHuntHtml.includes("du kannst nur alle")
           ) {
             cooldownReason = "PvP attack cooldown";
           } else if (
