@@ -6,7 +6,6 @@ import { Progress } from "@/components/ui/progress";
 import {
   Skull,
   Coins,
-  Zap,
   Shield,
   Swords,
   Heart,
@@ -19,7 +18,7 @@ import { useUserProfile } from "@/components/dashboard/DashboardDataProvider";
 // Hoisted icon elements to prevent re-creation on each render
 const SkullIcon = <Skull className="text-accent w-4 h-4" />;
 const CoinsIcon = <Coins className="text-accent w-4 h-4" />;
-const ZapIcon = <Zap className="text-accent w-4 h-4" />;
+const HeartIcon4 = <Heart className="text-accent w-4 h-4" />;
 const ShieldIcon = <Shield className="text-accent w-4 h-4" />;
 
 const SwordsIcon3 = <Swords className="w-3 h-3" />;
@@ -60,8 +59,10 @@ export function QuickStats() {
 
   const xpProgress =
     stats.nextLevelExp > 0 ? (stats.experience / stats.nextLevelExp) * 100 : 0;
+  const xpPercent = Math.min(100, Math.round(xpProgress));
   const staminaProgress =
     stats.maxStamina > 0 ? (stats.stamina / stats.maxStamina) * 100 : 0;
+  const staminaPercent = Math.min(100, Math.round(staminaProgress));
 
   return (
     <div className="space-y-4">
@@ -71,7 +72,7 @@ export function QuickStats() {
           value={stats.level.toString()}
           icon={SkullIcon}
           progress={xpProgress}
-          progressLabel={`XP: ${stats.experience.toLocaleString()} / ${stats.nextLevelExp.toLocaleString()}`}
+          progressLabel={`XP: ${stats.experience.toLocaleString()} / ${stats.nextLevelExp.toLocaleString()} (${xpPercent}%)`}
         />
         <StatCard
           label="Blood Gold"
@@ -79,10 +80,11 @@ export function QuickStats() {
           icon={CoinsIcon}
         />
         <StatCard
-          label="Stamina"
+          label="Health"
           value={`${stats.stamina} / ${stats.maxStamina}`}
-          icon={ZapIcon}
+          icon={HeartIcon4}
           progress={staminaProgress}
+          progressLabel={`${staminaPercent}%`}
         />
         <StatCard
           label="Shadow Power"
