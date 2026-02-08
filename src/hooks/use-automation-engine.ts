@@ -107,7 +107,16 @@ export function useAutomationEngine(): AutomationEngineState {
 
       cooldownRef.current = result.pvpCooldown;
       setCooldown(result.pvpCooldown);
-      setCooldownReason(result.cooldownReason || "");
+      setCooldownReason((prev) => {
+        const nextReason = result.cooldownReason || "";
+        if (nextReason) {
+          return nextReason;
+        }
+        if (result.pvpCooldown > 0) {
+          return prev;
+        }
+        return "";
+      });
       setManualPvpStatus(result.manualPvpStatus || null);
 
       const updateData: any = {
@@ -238,7 +247,7 @@ export function useAutomationEngine(): AutomationEngineState {
             server: credentials.description || "es1.monstersgame.moonid.net",
           })
             .then((result) => {
-              if (result.pvpCooldown >= 0) {
+              if (result.pvpCooldown > 0) {
                 cooldownRef.current = result.pvpCooldown;
                 setCooldown(result.pvpCooldown);
               }
