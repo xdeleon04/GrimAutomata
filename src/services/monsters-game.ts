@@ -1057,6 +1057,11 @@ export async function fetchMonstersGameData(
       logDebug("[MESSAGES] Failed to fetch PvP message history");
     }
 
+    // Fallback: ensure cooldownReason is set if there's an active cooldown
+    if (pvpCooldown > 0 && !cooldownReason) {
+      cooldownReason = "Action cooldown active";
+    }
+
     return {
       race,
       stats: {
