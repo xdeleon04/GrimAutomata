@@ -21,6 +21,7 @@ export interface AutomationEngineState {
   isSyncing: boolean;
   debugMode: boolean;
   cooldown: number;
+  cooldownReason: string;
   credentials: any;
   manualPvpStatus: any;
   handleToggle: () => void;
@@ -35,6 +36,7 @@ export function useAutomationEngine(): AutomationEngineState {
   const [isSyncing, setIsSyncing] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [cooldownReason, setCooldownReason] = useState("");
   const [manualPvpStatus, setManualPvpStatus] = useState<any>(null);
 
   const lastSyncRef = useRef<number>(0);
@@ -101,6 +103,7 @@ export function useAutomationEngine(): AutomationEngineState {
 
       cooldownRef.current = result.pvpCooldown;
       setCooldown(result.pvpCooldown);
+      setCooldownReason(result.cooldownReason || "");
       setManualPvpStatus(result.manualPvpStatus || null);
 
       const updateData: any = {
@@ -261,6 +264,7 @@ export function useAutomationEngine(): AutomationEngineState {
     } else {
       setUptime(0);
       setCooldown(0);
+      setCooldownReason("");
       cooldownRef.current = 0;
       lastSyncRef.current = 0;
       initialSyncRequiredRef.current = false;
@@ -287,6 +291,7 @@ export function useAutomationEngine(): AutomationEngineState {
     isSyncing,
     debugMode,
     cooldown,
+    cooldownReason,
     credentials,
     manualPvpStatus,
     handleToggle,

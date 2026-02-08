@@ -31,6 +31,7 @@ export type MoonIdSyncInput = z.infer<typeof MoonIdSyncInputSchema>;
 const MoonIdSyncOutputSchema = z.object({
   race: z.enum(["Vampire", "Werewolf"]),
   pvpCooldown: z.number().default(0),
+  cooldownReason: z.string().optional(),
   logs: z.array(
     z.object({
       type: z.enum([

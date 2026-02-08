@@ -20,6 +20,7 @@ export function StatusHeader() {
     isSyncing,
     debugMode,
     cooldown,
+    cooldownReason,
     credentials,
     handleToggle,
     setDebugMode,
@@ -59,7 +60,12 @@ export function StatusHeader() {
           {cooldown > 0 && (
             <div className="flex items-center gap-2 text-orange-400">
               <Activity className="w-4 h-4 animate-pulse" />
-              <span>Cooldown: {formatTime(cooldown)}</span>
+              <span>
+                Cooldown: {formatTime(cooldown)}
+                {cooldownReason && (
+                  <span className="text-muted-foreground ml-1">({cooldownReason})</span>
+                )}
+              </span>
             </div>
           )}
           <Button

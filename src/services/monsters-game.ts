@@ -20,6 +20,7 @@ export interface MonstersGameStats {
     timestamp: string;
   }>;
   pvpCooldown: number; // Seconds remaining for any active cooldown (PvP, Work, or Manhunt)
+  cooldownReason?: string; // Human-readable reason for the current cooldown
   stats: {
     level: number;
     gold: number;
@@ -1094,6 +1095,7 @@ export async function fetchMonstersGameData(
       },
       logs,
       pvpCooldown,
+      cooldownReason,
       pvpResults,
       manualPvpStatus,
     };
