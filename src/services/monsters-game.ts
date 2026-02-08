@@ -653,8 +653,37 @@ export async function fetchMonstersGameData(
                 const rivalRace = rivalRaceMatch
                   ? rivalRaceMatch[1]
                   : undefined;
-                const rivalName =
-                  rivalNameMatch?.[1]?.trim() || "Unknown Rival";
+                let rivalName = rivalNameMatch?.[1]?.trim();
+
+                if (!rivalName && gegnerIdMatch) {
+                  try {
+                    const profileUrl = buildUrl(
+                      server,
+                      `${MG_ROUTES.PROFILE}&showuserid=${gegnerIdMatch[1]}`,
+                    );
+                    const profileRes = await fetch(profileUrl, {
+                      headers: {
+                        Cookie: getCookieString(),
+                        "User-Agent": userAgent,
+                      },
+                    });
+                    const profileHtml = await profileRes.text();
+                    const profileNameMatch =
+                      profileHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i) ||
+                      profileHtml.match(MG_REGEX.RIVAL_LINK) ||
+                      profileHtml.match(
+                        /sac=info&(?:amp;)?id=\d+[^>]*>([^<]+)<\/a>/i,
+                      );
+                    rivalName = profileNameMatch?.[1]?.trim();
+                    if (!rivalName) {
+                      rivalName = `Rival#${gegnerIdMatch[1]}`;
+                    }
+                  } catch {
+                    rivalName = `Rival#${gegnerIdMatch[1]}`;
+                  }
+                }
+
+                const resolvedRivalName = rivalName || "Unknown Rival";
 
                 if (gegnerIdMatch) {
                   const battleRes = await fetch(huntPageUrl, {
@@ -681,11 +710,11 @@ export async function fetchMonstersGameData(
                   cooldownReason = "PvP battle recovery";
                   logs.push({
                     type: "BATTLE",
-                    message: `PvP Ritual: ${battleResult.isWinner ? "VICTORY" : "DEFEAT"} vs ${rivalName}. Loot: ${battleResult.goldLooted.toFixed(2)} gold, ${battleResult.xpEarned} XP.`,
+                    message: `PvP Ritual: ${battleResult.isWinner ? "VICTORY" : "DEFEAT"} vs ${resolvedRivalName}. Loot: ${battleResult.goldLooted.toFixed(2)} gold, ${battleResult.xpEarned} XP.`,
                     timestamp: new Date().toISOString(),
                   });
                   pvpResults.push({
-                    rivalName,
+                    rivalName: resolvedRivalName,
                     rivalGameId: gegnerIdMatch[1],
                     rivalRace,
                     isWinner: battleResult.isWinner,

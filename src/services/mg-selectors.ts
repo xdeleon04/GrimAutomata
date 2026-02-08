@@ -16,6 +16,7 @@ export const MG_ROUTES = {
   ANCESTRAL: "index.php?ac=ahnenstaette",
   MESSAGES_ATTACK: "index.php?ac=nachrichten&sac=angriff",
   MESSAGES_DEFENSE: "index.php?ac=nachrichten&sac=verteidigung",
+  PROFILE: "index.php?ac=showuser",
 } as const;
 
 // ============================================================================
