@@ -177,6 +177,8 @@ export const MG_REGEX = {
   WINNER_BANNER: /<div class="headerRowCWinner">.*?([^<]+)<\/div>/i,
   FIGHT_REPORT_LINK: /ac=fightreport&(?:amp;)?fightid=(\d+)/gi,
   RIVAL_LINK: /ac=showuser&(?:amp;)?showuserid=(\d+)[^>]*>([^<]+)<\/a>/i,
+  PROFILE_NAME:
+    /<div class="headerRow">(?:Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)\s+([^<]+)<\/div>/i,
   OPPONENT_ID: /name=["']gegnerid["']\s+value=["'](\d+)["']/i,
 
   // Loot parsing

@@ -669,7 +669,7 @@ export async function fetchMonstersGameData(
                     });
                     const profileHtml = await profileRes.text();
                     const profileNameMatch =
-                      profileHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i) ||
+                      profileHtml.match(MG_REGEX.PROFILE_NAME) ||
                       profileHtml.match(MG_REGEX.RIVAL_LINK) ||
                       profileHtml.match(
                         /sac=info&(?:amp;)?id=\d+[^>]*>([^<]+)<\/a>/i,
