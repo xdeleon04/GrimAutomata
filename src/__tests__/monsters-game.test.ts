@@ -39,6 +39,9 @@ const MOCK_LOGIN_FLOW = [
 describe("fetchMonstersGameData", () => {
   beforeEach(() => {
     mockFetch.mockClear();
+    mockFetch.mockImplementation(() =>
+      createMockResponse("<div>Empty messages</div>"),
+    );
   });
 
   it("should fetch and parse data correctly when idle", async () => {

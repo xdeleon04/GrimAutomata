@@ -4,6 +4,29 @@
  * Handles authentication, cookie persistence, and active ritual execution (automations).
  */
 
+import {
+  MG_ROUTES,
+  MG_PARAMS,
+  MG_TEXT,
+  MG_REGEX,
+  MG_POTIONS,
+  MG_TRAINING,
+  parseEuropeanNumber,
+  formatDuration,
+  parseTimeFromText,
+  extractCooldownTimer,
+  matchesAnyPattern,
+  detectRace,
+  detectBusyState,
+  detectCooldownReason,
+  parseStatbar,
+  parseAttributes,
+  parseBattleResult,
+  findBestPotion,
+  findPotionInInventory,
+  buildUrl,
+} from "./mg-selectors";
+
 export interface MonstersGameStats {
   race: "Vampire" | "Werewolf";
   logs: Array<{
@@ -54,60 +77,6 @@ export interface MonstersGameStats {
     totalTargets: number;
     attempted: string[];
   };
-}
-
-/**
- * Normalizes European number formatting (e.g., 66.876,06 -> 66876.06)
- */
-function parseMGNumber(str: string | null): number {
-  if (!str) return 0;
-  const normalized = str
-    .trim()
-    .replace(/\s/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  return parseFloat(normalized) || 0;
-}
-
-/**
- * Formats seconds into a human-readable duration string (Xh Ym Zs).
- */
-function formatDuration(seconds: number): string {
-  if (seconds <= 0) return "0s";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-
-  const parts = [];
-  if (h > 0) parts.push(`${h}h`);
-  if (m > 0) parts.push(`${m}m`);
-  if (s > 0 || (h === 0 && m === 0)) parts.push(`${s}s`);
-
-  return parts.join(" ");
-}
-
-/**
- * Parses actual remaining time from page text.
- * Handles patterns like:
- * - "In 9 minutes" / "En 9 minutos"
- * - "every 15 minutes" / "cada 15 minutos"
- * - "X hours" / "X horas"
- * Returns seconds, or null if no text-based time found.
- */
-function parseTimeFromText(html: string): number | null {
-  const combinedMatch = html.match(
-    /(?:In|En)\s+(\d+)\s+(?:hours?|horas?)\s+(?:and|y|,)\s+(\d+)\s+(?:minutes?|minutos?)/i,
-  );
-  if (combinedMatch)
-    return parseInt(combinedMatch[1]) * 3600 + parseInt(combinedMatch[2]) * 60;
-
-  const hoursMatch = html.match(/(?:In|En)\s+(\d+)\s+(?:hours?|horas?)/i);
-  if (hoursMatch) return parseInt(hoursMatch[1]) * 3600;
-
-  const minutesMatch = html.match(/(?:In|En)\s+(\d+)\s+(?:minutes?|minutos?)/i);
-  if (minutesMatch) return parseInt(minutesMatch[1]) * 60;
-
-  return null;
 }
 
 /**
@@ -194,13 +163,12 @@ export async function fetchCooldownOnly(
       username,
       password,
     );
-    const statusUrl = `https://${server}/index.php?ac=status`;
+    const statusUrl = buildUrl(server, MG_ROUTES.STATUS);
     const statusResponse = await fetch(statusUrl, {
       headers: { Cookie: getCookieString(), "User-Agent": userAgent },
     });
     const html = await statusResponse.text();
-    const secondsMatch = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
-    return { pvpCooldown: secondsMatch ? parseInt(secondsMatch[1]) : 0 };
+    return { pvpCooldown: extractCooldownTimer(html) };
   } catch {
     return { pvpCooldown: -1 };
   }
@@ -233,23 +201,6 @@ export async function fetchMonstersGameData(
     }
   };
 
-  const POTIONS = [
-    { id: 11, cost: 4250, name: "Esencia de fortaleza (5000)" },
-    { id: 10, cost: 2200, name: "Esencia de fortaleza (2500)" },
-    { id: 8, cost: 891, name: "Esencia de fortaleza (1000)" },
-    { id: 7, cost: 445, name: "Esencia de fortaleza (500)" },
-    { id: 2, cost: 89, name: "Esencia de fortaleza (100)" },
-    { id: 1, cost: 49, name: "Esencia de fortaleza (50)" },
-  ];
-
-  const TRAINING_MAP: Record<string, { type: string; label: string }> = {
-    train_strength: { type: "staerke", label: "Fuerza" },
-    train_defense: { type: "verteidigung", label: "Defensa" },
-    train_agility: { type: "gewandtheit", label: "Agilidad" },
-    train_constitution: { type: "ausdauer", label: "Resistencia" },
-    train_dexterity: { type: "charisma", label: "Destreza" },
-  };
-
   try {
     logDebug(
       `[AUTH] Initiating MoonID authentication ritual for [${username}]...`,
@@ -261,81 +212,44 @@ export async function fetchMonstersGameData(
     );
 
     // --- STEP 1: INITIAL SYNC ---
-    const statusUrl = `https://${server}/index.php?ac=status`;
+    const statusUrl = buildUrl(server, MG_ROUTES.STATUS);
     let statusResponse = await fetch(statusUrl, {
       headers: { Cookie: getCookieString(), "User-Agent": userAgent },
     });
     let html = await statusResponse.text();
 
-    const staminaMatch =
-      html.match(
-        /Energía\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/is,
-      ) || html.match(/Energía\s+vital:\s*([\d,.]+)/i);
-    const stamina = parseMGNumber(staminaMatch ? staminaMatch[1] : "0");
-    const maxStamina = parseMGNumber(
-      staminaMatch && staminaMatch[2] ? staminaMatch[2] : "800",
-    );
+    const statbar = parseStatbar(html);
+    const stamina = statbar.stamina;
+    const maxStamina = statbar.maxStamina;
 
     const staminaReservePercent = parseInt(settings.stamina_reserve || "10");
     const thresholdValue = (staminaReservePercent / 100) * maxStamina;
 
-    const race =
-      html.toLowerCase().includes("vampiro") ||
-      html.toLowerCase().includes("vampira")
-        ? "Vampire"
-        : "Werewolf";
+    const race = detectRace(html);
+    let currentGold = statbar.gold;
+    pvpCooldown = extractCooldownTimer(html);
 
-    const goldMatch = html.match(/id=["']goldbalance["'][^>]*>([\d,.]+)</i);
-    let currentGold = parseMGNumber(goldMatch?.[1] || "0");
-
-    const secondsMatchStatus = html.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i);
-    pvpCooldown = secondsMatchStatus ? parseInt(secondsMatchStatus[1]) : 0;
-
-    // Improved context-aware busy detection using pageContentC
-    const busyMsgBox = html.match(
-      /class=["']pageContentC["'][^>]*>(.*?)<\/div>/is,
-    );
-    const busyText = busyMsgBox ? busyMsgBox[1].toLowerCase() : "";
-
-    let isWorking =
-      busyText.includes("trabajando") ||
-      busyText.includes("cementerio") ||
-      busyText.includes("friedhof") ||
-      busyText.includes("graveyard") ||
-      busyText.includes("working");
-    let isInMission =
-      busyText.includes("misión") ||
-      busyText.includes("mision") ||
-      busyText.includes("grotto") ||
-      busyText.includes("ahnenstaette");
-    let isManhunting =
-      busyText.includes("raid") ||
-      busyText.includes("caza") ||
-      busyText.includes("raubzug");
+    const busyState = detectBusyState(html);
+    let isWorking = busyState.isWorking;
+    let isInMission = busyState.isInMission;
+    let isManhunting = busyState.isManhunting;
 
     // --- MANHUNT COMPLETION: collect results when timer has expired ---
     if (isManhunting && pvpCooldown <= 0) {
-      const huntPageUrl = `https://${server}/index.php?ac=raubzug`;
+      const huntPageUrl = buildUrl(server, MG_ROUTES.RAID);
       const huntCollectRes = await fetch(huntPageUrl, {
         headers: { Cookie: getCookieString(), "User-Agent": userAgent },
       });
       const huntCollectHtml = await huntCollectRes.text();
 
       // Parse manhunt spoils
-      if (
-        huntCollectHtml.includes("Resultado de la caza") ||
-        huntCollectHtml.includes("Result of the hunt")
-      ) {
-        const blood =
-          huntCollectHtml.match(/(\d+)\s+litros\s+de\s+sangre/i)?.[1] || "0";
-        const goldVal = parseMGNumber(
-          huntCollectHtml.match(/([\d,.]+)\s+<img[^>]+alt=["']Oro["']/i)?.[1] ||
-            "0",
+      if (matchesAnyPattern(huntCollectHtml, MG_TEXT.HUNT_RESULT)) {
+        const blood = huntCollectHtml.match(MG_REGEX.LOOT_BLOOD)?.[1] || "0";
+        const goldVal = parseEuropeanNumber(
+          huntCollectHtml.match(MG_REGEX.LOOT_GOLD)?.[1] || "0",
         );
-        const expVal = parseMGNumber(
-          huntCollectHtml.match(
-            /([\d,.]+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia|experience)/i,
-          )?.[1] || "0",
+        const expVal = parseEuropeanNumber(
+          huntCollectHtml.match(MG_REGEX.LOOT_XP)?.[1] || "0",
         );
 
         if (blood !== "0" || goldVal > 0 || expVal > 0) {
@@ -344,10 +258,7 @@ export async function fetchMonstersGameData(
             message: `Manhunt Harvest: Collected ${blood} liters of blood, ${goldVal.toFixed(2)} gold, and ${expVal} XP.`,
             timestamp: new Date().toISOString(),
           });
-        } else if (
-          huntCollectHtml.includes("nada que encontrar") ||
-          huntCollectHtml.includes("nothing to be found")
-        ) {
+        } else if (matchesAnyPattern(huntCollectHtml, MG_TEXT.HUNT_NOTHING)) {
           logs.push({
             type: "MANHUNT",
             message: "Manhunt result: The shadows yielded nothing this time.",
@@ -356,18 +267,15 @@ export async function fetchMonstersGameData(
         }
       }
 
-      const huntLimitReached =
-        huntCollectHtml.includes("ya has usado todo tu tiempo de caza") ||
-        huntCollectHtml.includes("used all of today's hunting time");
-      const hasRepeatForm = /name=["']sac["']\s+value=["']vampir["']/i.test(
+      const huntLimitReached = matchesAnyPattern(
         huntCollectHtml,
+        MG_TEXT.HUNT_LIMIT,
       );
+      const hasRepeatForm = MG_REGEX.MANHUNT_REPEAT_FORM.test(huntCollectHtml);
 
       if (settings.auto_manhunt && hasRepeatForm && !huntLimitReached) {
         // Extract jagdzeit from the repeat form, or use configured duration
-        const jagdzeitMatch = huntCollectHtml.match(
-          /name=["']jagdzeit["']\s+value=["'](\d+)["']/i,
-        );
+        const jagdzeitMatch = huntCollectHtml.match(MG_REGEX.MANHUNT_JAGDZEIT);
         const jagdzeitSeconds = jagdzeitMatch
           ? parseInt(jagdzeitMatch[1])
           : parseInt(settings.manhunt_duration || "10") * 60;
@@ -375,8 +283,8 @@ export async function fetchMonstersGameData(
 
         const repeatPayload = new URLSearchParams({
           ac: "raubzug",
-          sac: "vampir",
-          jagdzeit: jagdzeitSeconds.toString(),
+          sac: MG_PARAMS.MANHUNT_SAC,
+          [MG_PARAMS.MANHUNT_TIME]: jagdzeitSeconds.toString(),
         });
         const repeatRes = await fetch(huntPageUrl, {
           method: "POST",
@@ -390,11 +298,7 @@ export async function fetchMonstersGameData(
         const repeatHtml = await repeatRes.text();
         const textCooldown = parseTimeFromText(repeatHtml);
         pvpCooldown =
-          textCooldown ??
-          parseInt(
-            repeatHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
-              jagdzeitSeconds.toString(),
-          );
+          textCooldown ?? (extractCooldownTimer(repeatHtml) || jagdzeitSeconds);
         cooldownReason = "Manhunt in progress";
         logs.push({
           type: "MANHUNT",
@@ -419,33 +323,12 @@ export async function fetchMonstersGameData(
         headers: { Cookie: getCookieString(), "User-Agent": userAgent },
       });
       html = await statusResponse.text();
-      const refreshedCooldown = html.match(
-        /var\s+SecondsCOUNTER\s*=\s*(\d+);/i,
-      );
-      if (refreshedCooldown) pvpCooldown = parseInt(refreshedCooldown[1]);
+      pvpCooldown = extractCooldownTimer(html);
 
-      // Re-evaluate busy flags from refreshed page
-      const refreshedBusyBox = html.match(
-        /class=["']pageContentC["'][^>]*>(.*?)<\/div>/is,
-      );
-      const refreshedBusy = refreshedBusyBox
-        ? refreshedBusyBox[1].toLowerCase()
-        : "";
-      isWorking =
-        refreshedBusy.includes("trabajando") ||
-        refreshedBusy.includes("cementerio") ||
-        refreshedBusy.includes("friedhof") ||
-        refreshedBusy.includes("graveyard") ||
-        refreshedBusy.includes("working");
-      isInMission =
-        refreshedBusy.includes("misión") ||
-        refreshedBusy.includes("mision") ||
-        refreshedBusy.includes("grotto") ||
-        refreshedBusy.includes("ahnenstaette");
-      isManhunting =
-        refreshedBusy.includes("raid") ||
-        refreshedBusy.includes("caza") ||
-        refreshedBusy.includes("raubzug");
+      const refreshedBusyState = detectBusyState(html);
+      isWorking = refreshedBusyState.isWorking;
+      isInMission = refreshedBusyState.isInMission;
+      isManhunting = refreshedBusyState.isManhunting;
     }
 
     if (pvpCooldown > 0 || isWorking || isInMission || isManhunting) {
@@ -480,15 +363,13 @@ export async function fetchMonstersGameData(
       if (stamina <= thresholdValue && settings.auto_alchemy) {
         const budget = parseInt(settings.potion_budget || "445");
         const targetPotion =
-          POTIONS.find((p) => p.cost <= budget && p.cost <= currentGold) ||
-          POTIONS[POTIONS.length - 1];
+          findBestPotion(currentGold, budget) ||
+          MG_POTIONS[MG_POTIONS.length - 1];
 
-        const potionInInventory = POTIONS.find((p) =>
-          html.includes(`useitem=${p.id}`),
-        );
+        const potionInInventory = findPotionInInventory(html);
 
         if (potionInInventory) {
-          const useUrl = `https://${server}/index.php?ac=status&useitem=${potionInInventory.id}`;
+          const useUrl = `${statusUrl}&useitem=${potionInInventory.id}`;
           await fetch(useUrl, {
             headers: { Cookie: getCookieString(), "User-Agent": userAgent },
           });
@@ -519,7 +400,10 @@ export async function fetchMonstersGameData(
           traderParams.append("x", "172");
           traderParams.append("y", "30");
 
-          const traderUrl = `https://${server}/index.php?ac=stadt&sac=warenhaendler&action=buy&item_id=${targetPotion.id}&prod_group=4&currency=gold&sc=`;
+          const traderUrl = `${buildUrl(
+            server,
+            MG_ROUTES.STORE,
+          )}&action=buy&item_id=${targetPotion.id}&prod_group=4&currency=gold&sc=`;
           await fetch(traderUrl, {
             method: "POST",
             headers: {
@@ -531,7 +415,7 @@ export async function fetchMonstersGameData(
             body: traderParams,
           });
 
-          const useUrl = `https://${server}/index.php?ac=status&useitem=${targetPotion.id}`;
+          const useUrl = `${statusUrl}&useitem=${targetPotion.id}`;
           await fetch(useUrl, {
             headers: { Cookie: getCookieString(), "User-Agent": userAgent },
           });
@@ -548,12 +432,7 @@ export async function fetchMonstersGameData(
       }
 
       // Check final stamina after potential alchemy
-      const finalStaminaMatch = html.match(
-        /Energía\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/is,
-      );
-      const currentStamina = parseMGNumber(
-        finalStaminaMatch ? finalStaminaMatch[1] : stamina.toString(),
-      );
+      const currentStamina = parseStatbar(html).stamina;
 
       if (currentStamina <= thresholdValue && settings.auto_work !== false) {
         const pointsNeeded = Math.max(0, thresholdValue - currentStamina + 10);
@@ -563,10 +442,11 @@ export async function fetchMonstersGameData(
         );
         const workPayload = new URLSearchParams({
           ac: "friedhof",
-          sac: "startjob",
-          arbeitszeit: hoursToWork.toString(),
+          sac: MG_PARAMS.WORK_SAC,
+          [MG_PARAMS.WORK_TIME]: hoursToWork.toString(),
         });
-        const workRes = await fetch(`https://${server}/index.php?ac=friedhof`, {
+        const graveyardUrl = buildUrl(server, MG_ROUTES.GRAVEYARD);
+        const workRes = await fetch(graveyardUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -579,10 +459,7 @@ export async function fetchMonstersGameData(
         const textCooldownWork = parseTimeFromText(workHtml);
         pvpCooldown =
           textCooldownWork ??
-          parseInt(
-            workHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
-              (hoursToWork * 3600).toString(),
-          );
+          (extractCooldownTimer(workHtml) || hoursToWork * 3600);
         cooldownReason = "Graveyard work shift in progress";
         logs.push({
           type: "INFO",
@@ -591,23 +468,20 @@ export async function fetchMonstersGameData(
         });
       } else {
         // Combat Rituals
-        const huntPageUrl = `https://${server}/index.php?ac=raubzug`;
+        const huntPageUrl = buildUrl(server, MG_ROUTES.RAID);
         const huntPageRes = await fetch(huntPageUrl, {
           headers: { Cookie: getCookieString(), "User-Agent": userAgent },
         });
         const huntHtml = await huntPageRes.text();
 
         // Parse Manhunt Spoils if just returned
-        if (huntHtml.includes("Resultado de la caza")) {
-          const blood =
-            huntHtml.match(/(\d+)\s+litros\s+de\s+sangre/i)?.[1] || "0";
-          const goldVal = parseMGNumber(
-            huntHtml.match(/([\d,.]+)\s+<img[^>]+alt=["']Oro["']/i)?.[1] || "0",
+        if (matchesAnyPattern(huntHtml, MG_TEXT.HUNT_RESULT)) {
+          const blood = huntHtml.match(MG_REGEX.LOOT_BLOOD)?.[1] || "0";
+          const goldVal = parseEuropeanNumber(
+            huntHtml.match(MG_REGEX.LOOT_GOLD)?.[1] || "0",
           );
-          const expVal = parseMGNumber(
-            huntHtml.match(
-              /([\d,.]+)\s+(?:experience\s+points|puntos\s+de\s+experiencia|experiencia|experience)/i,
-            )?.[1] || "0",
+          const expVal = parseEuropeanNumber(
+            huntHtml.match(MG_REGEX.LOOT_XP)?.[1] || "0",
           );
 
           if (blood !== "0" || goldVal > 0 || expVal > 0) {
@@ -616,10 +490,7 @@ export async function fetchMonstersGameData(
               message: `Manhunt Harvest: Collected ${blood} liters of blood, ${goldVal.toFixed(2)} gold, and ${expVal} XP.`,
               timestamp: new Date().toISOString(),
             });
-          } else if (
-            huntHtml.includes("nada que encontrar") ||
-            huntHtml.includes("nothing to be found")
-          ) {
+          } else if (matchesAnyPattern(huntHtml, MG_TEXT.HUNT_NOTHING)) {
             logs.push({
               type: "MANHUNT",
               message: "Manhunt result: The shadows yielded nothing this time.",
@@ -628,43 +499,18 @@ export async function fetchMonstersGameData(
           }
         }
 
-        pvpCooldown = parseInt(
-          huntHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] || "0",
-        );
+        pvpCooldown = extractCooldownTimer(huntHtml);
 
         // Detect specific cooldown reason from hunt page content
         if (pvpCooldown > 0 && !cooldownReason) {
-          const lowerHuntHtml = huntHtml.toLowerCase();
-          if (
-            lowerHuntHtml.includes("you can only fight every") ||
-            lowerHuntHtml.includes("solo puedes luchar cada") ||
-            lowerHuntHtml.includes("caza de adversarios") ||
-            lowerHuntHtml.includes("du kannst nur alle")
-          ) {
-            cooldownReason = "PvP attack cooldown";
-          } else if (
-            lowerHuntHtml.includes("caza de humanos") ||
-            lowerHuntHtml.includes("human hunt") ||
-            lowerHuntHtml.includes("menschenjagd")
-          ) {
-            cooldownReason = "Manhunt in progress";
-          } else if (
-            lowerHuntHtml.includes("trabajando") ||
-            lowerHuntHtml.includes("cementerio") ||
-            lowerHuntHtml.includes("friedhof") ||
-            lowerHuntHtml.includes("graveyard") ||
-            lowerHuntHtml.includes("working")
-          ) {
-            cooldownReason = "Graveyard work shift in progress";
-          } else {
-            cooldownReason = "Combat cooldown active";
-          }
+          cooldownReason = detectCooldownReason(huntHtml);
         }
 
         if (pvpCooldown <= 0) {
-          const humanLimitReached =
-            huntHtml.includes("used all of today's hunting time") ||
-            huntHtml.includes("ya has usado todo tu tiempo de caza");
+          const humanLimitReached = matchesAnyPattern(
+            huntHtml,
+            MG_TEXT.HUNT_LIMIT,
+          );
 
           if (pvpCooldown <= 0 && humanLimitReached) {
             if (settings.manual_pvp && pvpTargetList.length > 0) {
@@ -684,19 +530,19 @@ export async function fetchMonstersGameData(
                   },
                   body: new URLSearchParams({
                     ac: "raubzug",
-                    sac: "attack",
+                    sac: MG_PARAMS.PVP_ATTACK_SAC,
                     gegnerid: rival.rivalGameId,
                   }),
                 });
                 const battleHtml = await battleRes.text();
 
-                const notFound =
-                  /no fue encontrado|not found|kein gegner/i.test(battleHtml);
+                const notFound = matchesAnyPattern(
+                  battleHtml,
+                  MG_TEXT.NOT_FOUND,
+                );
                 const hasBattleResult =
                   battleHtml.includes("headerRowCWinner") ||
-                  /Ha conseguido|puntos?\s+de\s+experiencia|experience\s+points/i.test(
-                    battleHtml,
-                  );
+                  MG_REGEX.LOOT_XP.test(battleHtml);
 
                 if (notFound) {
                   logs.push({
@@ -716,41 +562,24 @@ export async function fetchMonstersGameData(
                   continue;
                 }
 
-                const isWinner =
-                  battleHtml.includes("headerRowCWinner") ||
-                  battleHtml.includes("ganado");
-                const lootVal = parseMGNumber(
-                  battleHtml.match(
-                    /Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i,
-                  )?.[1] || "0",
-                );
-                const expVal = parseMGNumber(
-                  battleHtml.match(
-                    /([\d,.]+)\s+(?:experience\s+points|punto\(?s?\)?\s+de\s+experiencia|puntos\s+de\s+experiencia|experiencia|puntos\s+de\s+exp|experience)/i,
-                  )?.[1] || "0",
-                );
+                const battleResult = parseBattleResult(battleHtml);
                 const textCooldownPvP = parseTimeFromText(battleHtml);
                 pvpCooldown =
-                  textCooldownPvP ??
-                  parseInt(
-                    battleHtml.match(
-                      /var\s+SecondsCOUNTER\s*=\s*(\d+);/i,
-                    )?.[1] || "900",
-                  );
+                  textCooldownPvP ?? (extractCooldownTimer(battleHtml) || 900);
                 cooldownReason = "PvP battle recovery";
 
                 logs.push({
                   type: "BATTLE",
-                  message: `Manual PvP: ${isWinner ? "VICTORY" : "DEFEAT"} vs ${rival.rivalName}. Loot: ${lootVal.toFixed(2)} gold, ${expVal} XP.`,
+                  message: `Manual PvP: ${battleResult.isWinner ? "VICTORY" : "DEFEAT"} vs ${rival.rivalName}. Loot: ${battleResult.goldLooted.toFixed(2)} gold, ${battleResult.xpEarned} XP.`,
                   timestamp: new Date().toISOString(),
                 });
                 pvpResults.push({
                   rivalName: rival.rivalName,
                   rivalGameId: rival.rivalGameId,
                   rivalRace: undefined,
-                  isWinner,
-                  goldLooted: lootVal,
-                  xpEarned: expVal,
+                  isWinner: battleResult.isWinner,
+                  goldLooted: battleResult.goldLooted,
+                  xpEarned: battleResult.xpEarned,
                   timestamp: new Date().toISOString(),
                 });
                 manualPvpStatus = {
@@ -775,9 +604,9 @@ export async function fetchMonstersGameData(
             } else if (settings.pvp_attack) {
               const pvpSearchPayload = new URLSearchParams({
                 ac: "raubzug",
-                sac: "gegner",
-                searchname: settings.pvp_target_name || "",
-                searchopt:
+                sac: MG_PARAMS.PVP_SEARCH_SAC,
+                [MG_PARAMS.SEARCH_NAME]: settings.pvp_target_name || "",
+                [MG_PARAMS.SEARCH_OPT]:
                   settings.pvp_search_strategy === "none"
                     ? ""
                     : settings.pvp_search_strategy || "",
@@ -794,7 +623,7 @@ export async function fetchMonstersGameData(
               const searchHtml = await pvpSearchRes.text();
 
               if (
-                searchHtml.includes("en vano") ||
+                matchesAnyPattern(searchHtml, MG_TEXT.NOT_FOUND) ||
                 searchHtml.includes("no character matches")
               ) {
                 logs.push({
@@ -804,17 +633,19 @@ export async function fetchMonstersGameData(
                   timestamp: new Date().toISOString(),
                 });
               } else {
-                const gegnerIdMatch = searchHtml.match(
-                  /name=['"]gegnerid['"]\s+value=['"](\d+)['"]/i,
-                );
-                const rivalNameMatch =
-                  searchHtml.match(
-                    /<div class="headerRow">(?:Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)\s+([^<]+)<\/div>/i,
-                  ) ||
-                  searchHtml.match(/sac=info&amp;id=\d+[^>]*>([^<]+)<\/a>/i) ||
-                  searchHtml.match(
-                    /<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i,
-                  );
+                const gegnerIdMatch = searchHtml.match(MG_REGEX.OPPONENT_ID);
+                const rivalLinkMatch = searchHtml.match(MG_REGEX.RIVAL_LINK);
+                const rivalNameMatch = rivalLinkMatch
+                  ? [rivalLinkMatch[2]]
+                  : searchHtml.match(
+                      /<div class="headerRow">(?:Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)\s+([^<]+)<\/div>/i,
+                    ) ||
+                    searchHtml.match(
+                      /sac=info&amp;id=\d+[^>]*>([^<]+)<\/a>/i,
+                    ) ||
+                    searchHtml.match(
+                      /<h3>(?:versus|contra|contra\s+)\s*([^<]+)<\/h3>/i,
+                    );
                 const rivalRaceMatch = searchHtml.match(
                   /<div class="headerRow">(Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)/i,
                 );
@@ -835,47 +666,31 @@ export async function fetchMonstersGameData(
                     },
                     body: new URLSearchParams({
                       ac: "raubzug",
-                      sac: "attack",
+                      sac: MG_PARAMS.PVP_ATTACK_SAC,
                       gegnerid: gegnerIdMatch[1],
                     }),
                   });
                   const battleHtml = await battleRes.text();
 
-                  const isWinner =
-                    battleHtml.includes("headerRowCWinner") ||
-                    battleHtml.includes("ganado");
-                  const lootVal = parseMGNumber(
-                    battleHtml.match(
-                      /Ha conseguido ([\d,.]+) <img[^>]+alt=["']Oro["']/i,
-                    )?.[1] || "0",
-                  );
-                  const expVal = parseMGNumber(
-                    battleHtml.match(
-                      /([\d,.]+)\s+(?:experience\s+points|punto\(?s?\)?\s+de\s+experiencia|puntos\s+de\s+experiencia|experiencia|puntos\s+de\s+exp|experience)/i,
-                    )?.[1] || "0",
-                  );
+                  const battleResult = parseBattleResult(battleHtml);
 
                   const textCooldownPvP = parseTimeFromText(battleHtml);
                   pvpCooldown =
                     textCooldownPvP ??
-                    parseInt(
-                      battleHtml.match(
-                        /var\s+SecondsCOUNTER\s*=\s*(\d+);/i,
-                      )?.[1] || "900",
-                    );
+                    (extractCooldownTimer(battleHtml) || 900);
                   cooldownReason = "PvP battle recovery";
                   logs.push({
                     type: "BATTLE",
-                    message: `PvP Ritual: ${isWinner ? "VICTORY" : "DEFEAT"} vs ${rivalName}. Loot: ${lootVal.toFixed(2)} gold, ${expVal} XP.`,
+                    message: `PvP Ritual: ${battleResult.isWinner ? "VICTORY" : "DEFEAT"} vs ${rivalName}. Loot: ${battleResult.goldLooted.toFixed(2)} gold, ${battleResult.xpEarned} XP.`,
                     timestamp: new Date().toISOString(),
                   });
                   pvpResults.push({
                     rivalName,
                     rivalGameId: gegnerIdMatch[1],
                     rivalRace,
-                    isWinner,
-                    goldLooted: lootVal,
-                    xpEarned: expVal,
+                    isWinner: battleResult.isWinner,
+                    goldLooted: battleResult.goldLooted,
+                    xpEarned: battleResult.xpEarned,
                     timestamp: new Date().toISOString(),
                   });
                 }
@@ -886,8 +701,8 @@ export async function fetchMonstersGameData(
             const seconds = minutes * 60;
             const mPayload = new URLSearchParams({
               ac: "raubzug",
-              sac: "vampir",
-              jagdzeit: seconds.toString(),
+              sac: MG_PARAMS.MANHUNT_SAC,
+              [MG_PARAMS.MANHUNT_TIME]: seconds.toString(),
               x: "194",
               y: "45",
             });
@@ -903,11 +718,7 @@ export async function fetchMonstersGameData(
             const mHtml = await mRes.text();
             const textCooldown = parseTimeFromText(mHtml);
             pvpCooldown =
-              textCooldown ??
-              parseInt(
-                mHtml.match(/var\s+SecondsCOUNTER\s*=\s*(\d+);/i)?.[1] ||
-                  seconds.toString(),
-              );
+              textCooldown ?? (extractCooldownTimer(mHtml) || seconds);
             cooldownReason = "Manhunt in progress";
             logs.push({
               type: "MANHUNT",
@@ -918,13 +729,17 @@ export async function fetchMonstersGameData(
         }
 
         if (settings.auto_grotto && pvpCooldown <= 0) {
-          const grottoUrl = `https://${server}/index.php?ac=ahnenstaette`;
+          const grottoUrl = buildUrl(server, MG_ROUTES.ANCESTRAL);
           const gCheck = await fetch(grottoUrl, {
             headers: { Cookie: getCookieString(), "User-Agent": userAgent },
           });
           const gHtml = await gCheck.text();
           if (!gHtml.includes("misión") && !gHtml.includes("mision")) {
-            const diffMap: any = { easy: "0", medium: "1", hard: "2" };
+            const diffMap: Record<string, string> = {
+              easy: "0",
+              medium: "1",
+              hard: "2",
+            };
             await fetch(grottoUrl, {
               method: "POST",
               headers: {
@@ -949,17 +764,21 @@ export async function fetchMonstersGameData(
 
         // Auto-Training Ritual
         if (settings.auto_training && pvpCooldown <= 0) {
-          const trainingUrl = `https://${server}/index.php?ac=training`;
+          const trainingUrl = buildUrl(server, MG_ROUTES.TRAINING);
           const tRes = await fetch(trainingUrl, {
             headers: { Cookie: getCookieString(), "User-Agent": userAgent },
           });
           const tHtml = await tRes.text();
-          currentGold = parseMGNumber(
+          currentGold = parseEuropeanNumber(
             tHtml.match(/Tu oro:.*?([\d,.]+)/is)?.[1] || currentGold.toString(),
           );
 
           const availableTrainings = [];
-          for (const [settingKey, config] of Object.entries(TRAINING_MAP)) {
+          const trainingEntries = Object.entries(MG_TRAINING) as Array<
+            [string, { type: string; label: string }]
+          >;
+
+          for (const [settingKey, config] of trainingEntries) {
             if (settings[settingKey] !== false) {
               const costMatch = tHtml.match(
                 new RegExp(
@@ -971,7 +790,7 @@ export async function fetchMonstersGameData(
                 availableTrainings.push({
                   type: config.type,
                   label: config.label,
-                  cost: parseMGNumber(costMatch[1]),
+                  cost: parseEuropeanNumber(costMatch[1]),
                 });
               }
             }
@@ -1005,27 +824,18 @@ export async function fetchMonstersGameData(
     });
     html = await statusResponse.text();
 
-    const finalStaminaMatch =
-      html.match(
-        /Energía\s+vital:.*?\(\s*([\d,.]+)\s*[|/]\s*([\d,.]+)\s*\)/is,
-      ) || html.match(/Energía\s+vital:\s*([\d,.]+)/i);
-    const finalStamina = parseMGNumber(
-      finalStaminaMatch ? finalStaminaMatch[1] : "0",
-    );
-    const finalMaxStamina = parseMGNumber(
-      finalStaminaMatch && finalStaminaMatch[2] ? finalStaminaMatch[2] : "800",
-    );
+    const finalStatbar = parseStatbar(html);
+    const finalAttributes = parseAttributes(html);
 
     // --- STEP 3: SCRAPE PVP HISTORY FROM MESSAGES ---
     try {
-      const messagesUrl = `https://${server}/index.php?ac=nachrichten&sac=angriff`;
+      const messagesUrl = buildUrl(server, MG_ROUTES.MESSAGES_ATTACK);
       const msgRes = await fetch(messagesUrl, {
         headers: { Cookie: getCookieString(), "User-Agent": userAgent },
       });
       const msgHtml = await msgRes.text();
 
-      const fightIdRegex =
-        /ac=fightreport&(?:amp;)?fightid=(\d+)&(?:amp;)?sac=angriff/gi;
+      const fightIdRegex = MG_REGEX.FIGHT_REPORT_LINK;
       const fightIds: string[] = [];
       let fightMatch;
       while ((fightMatch = fightIdRegex.exec(msgHtml)) !== null) {
@@ -1037,7 +847,10 @@ export async function fetchMonstersGameData(
       const reportsToFetch = fightIds.slice(0, 10);
       for (const fightId of reportsToFetch) {
         try {
-          const reportUrl = `https://${server}/index.php?ac=fightreport&fightid=${fightId}&sac=angriff`;
+          const reportUrl = buildUrl(
+            server,
+            `index.php?ac=fightreport&fightid=${fightId}&sac=angriff`,
+          );
           const reportRes = await fetch(reportUrl, {
             headers: { Cookie: getCookieString(), "User-Agent": userAgent },
           });
@@ -1049,19 +862,7 @@ export async function fetchMonstersGameData(
           const reportRivalId = reportHtml.match(
             /sac=info&(?:amp;)?id=(\d+)/i,
           )?.[1];
-          const reportIsWinner =
-            reportHtml.includes("headerRowCWinner") ||
-            reportHtml.includes("ganado");
-          const reportGold = parseMGNumber(
-            reportHtml.match(
-              /Ha conseguido ([\d,.]+)\s*<img[^>]+alt=["']Oro["']/i,
-            )?.[1] || "0",
-          );
-          const reportXp = parseMGNumber(
-            reportHtml.match(
-              /([\d,.]+)\s+(?:experience\s+points|punto\(?s?\)?\s+de\s+experiencia|puntos\s+de\s+experiencia|experiencia|puntos\s+de\s+exp|experience)/i,
-            )?.[1] || "0",
-          );
+          const reportResult = parseBattleResult(reportHtml);
           const reportRivalRace = reportHtml.match(
             /<div class="headerRow[^"]*">(Hombre Lobo|Vampiro|Vampira|Werwolf|Werewolf)/i,
           )?.[1];
@@ -1075,9 +876,9 @@ export async function fetchMonstersGameData(
                 rivalName: reportRivalName,
                 rivalGameId: reportRivalId,
                 rivalRace: reportRivalRace,
-                isWinner: reportIsWinner,
-                goldLooted: reportGold,
-                xpEarned: reportXp,
+                isWinner: reportResult.isWinner,
+                goldLooted: reportResult.goldLooted,
+                xpEarned: reportResult.xpEarned,
                 timestamp: new Date().toISOString(),
               });
             }
@@ -1093,40 +894,15 @@ export async function fetchMonstersGameData(
     return {
       race,
       stats: {
-        level: parseInt(
-          html.match(/char_level["'][^>]*>(?:Nivel\s*)?(\d+)/i)?.[1] || "0",
-        ),
-        gold: parseMGNumber(
-          html.match(/id=["']goldbalance["'][^>]*>([\d,.]+)</i)?.[1] || "0",
-        ),
-        blood: parseMGNumber(
-          html.match(/id=["']bloodbalance["'][^>]*>([\d,.]+)</i)?.[1] || "0",
-        ),
-        stamina: finalStamina,
-        maxStamina: finalMaxStamina,
-        experience: parseMGNumber(
-          html.match(/Experiencia.*?([\d,.]+)\s*[|/]\s*([\d,.]+)/is)?.[1] ||
-            "0",
-        ),
-        nextLevelExp: parseMGNumber(
-          html.match(/Experiencia.*?([\d,.]+)\s*[|/]\s*([\d,.]+)/is)?.[2] ||
-            "100",
-        ),
-        skillAverage: parseMGNumber(
-          html.match(/statbarSkillAverage["'][^>]*>.*?:\s*([\d,.]+)/i)?.[1] ||
-            "0",
-        ),
-        attributes: {
-          strength: parseInt(html.match(/Fuerza:.*?\((\d+)\)/is)?.[1] || "0"),
-          defense: parseInt(html.match(/Defensa:.*?\((\d+)\)/is)?.[1] || "0"),
-          dexterity: parseInt(
-            html.match(/Destreza:.*?\((\d+)\)/is)?.[1] || "0",
-          ),
-          agility: parseInt(html.match(/Agilidad:.*?\((\d+)\)/is)?.[1] || "0"),
-          constitution: parseInt(
-            html.match(/Resistencia:.*?\((\d+)\)/is)?.[1] || "0",
-          ),
-        },
+        level: finalStatbar.level,
+        gold: finalStatbar.gold,
+        blood: finalStatbar.blood,
+        stamina: finalStatbar.stamina,
+        maxStamina: finalStatbar.maxStamina,
+        experience: finalStatbar.experience,
+        nextLevelExp: finalStatbar.nextLevelExp,
+        skillAverage: finalStatbar.skillAverage,
+        attributes: finalAttributes,
       },
       logs,
       pvpCooldown,
@@ -1134,7 +910,8 @@ export async function fetchMonstersGameData(
       pvpResults,
       manualPvpStatus,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       race: "Vampire",
       pvpCooldown: 0,
@@ -1158,7 +935,7 @@ export async function fetchMonstersGameData(
       logs: [
         {
           type: "ERROR",
-          message: `Ritual Error: ${error.message}`,
+          message: `Ritual Error: ${message}`,
           timestamp: new Date().toISOString(),
         },
       ],
