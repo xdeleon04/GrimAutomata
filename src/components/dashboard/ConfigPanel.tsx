@@ -403,7 +403,7 @@ export function ConfigPanel() {
             <div className="space-y-4">
               <div className="flex justify-between">
                 <Label className="text-xs flex items-center gap-2">
-                  <Zap className="w-3 h-3" /> Stamina Ritual Threshold
+                  <Zap className="w-3 h-3" /> Health Ritual Threshold
                 </Label>
                 <span className="text-xs text-accent">
                   {getSetting("stamina_reserve", 10)}%
@@ -419,7 +419,7 @@ export function ConfigPanel() {
                 }
               />
               <p className="text-[10px] text-muted-foreground italic">
-                Rituals will pause if stamina falls below this percentage.
+                Rituals will pause if health falls below this percentage.
               </p>
             </div>
 
@@ -429,7 +429,7 @@ export function ConfigPanel() {
                   <Hammer className="w-3 h-3" /> Auto-Work at Graveyard
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Automatically work to restore stamina when below threshold.
+                  Automatically work to restore health when below threshold.
                 </p>
               </div>
               <Switch
